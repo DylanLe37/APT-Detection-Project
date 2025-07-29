@@ -46,17 +46,3 @@ colSet = [['Time','Source Comp','Comp Resolved'],
           ['Time','Source User@Domain','Destination User @Domain','Source Comp','Destination Comp','Auth Type','Logon Type','Auth Orientation','Success/Fail']]
 
 dataFolder = '/home/dylan/Documents/APTDetection/Data/'
-
-
-
-# for f in range(len(fileSet)):
-#     # filer = pd.read_csv(fileSet[f],sep=",",chunksize=10000,low_memory=False)
-#     # filer.columns = colSet[f]
-#     filer = pd.read_csv(fileSet[f],sep=",",usecols=[0])
-#     fileList.append(filer)
-# filer = pd.read_csv(fileSet[2])
-# filer.columns = colSet[2]
-#
-# plt.plot(filer['Time'])
-# plt.show(block=True)
-print('done')
