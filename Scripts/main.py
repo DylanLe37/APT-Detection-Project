@@ -1,7 +1,9 @@
 import numpy as np
 import os
 import pandas as pd
-import matplotlib.pyplot as plt
+import matplotlib as mpl
+mpl.use('Qt5Agg')
+from matplotlib import pyplot as plt
 import dask.dataframe as dd
 import utils
 from pathlib import Path
@@ -83,7 +85,6 @@ class dataExploration:
 
         plt.tight_layout()
         plt.subplots_adjust(hspace=0.4)
-        plt.show(block=True)
         return
 
 fileSet = ['dns.txt','flows.txt','redteam.txt','proc.txt','auth.txt']
