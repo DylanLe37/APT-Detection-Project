@@ -70,7 +70,7 @@ class dataExploration:
         ax[0][1].set_xlabel('Hour')
         ax[0][1].set_ylabel('Number of Events')
 
-        ax[1][0].bar(dailyEvents.index,dailyEvents.values)
+        ax[1][0].bar(dailyEvents.index,dailyEvents.values) #memory constraints mean length of sample is not a full week, this may be useless
         ax[1][0].set_title('Events by Day')
         ax[1][0].set_xlabel('Day')
         ax[1][0].set_ylabel('Number of Events')
@@ -87,6 +87,76 @@ class dataExploration:
         plt.subplots_adjust(hspace=0.4)
         return
 
+    def userAnalysis(self): #just for auth data
+        userStats = self.dataSample.groupby('Source User@Domain').agg(
+            {'timeStamp':['count','min','max'],'Destination Comp':'nunique','Source Comp':'nunique'}).round(2)
+        userStats.columns = ['totalAuths','firstAuth','lastAuth','uniqueDests','uniqueSources']
+
+        print(f'\n Total unique users:{self.dataSample['Source User@Domain'].nunique():,}')
+        print(f'Total unique computers:{self.dataSample['Destination Comp'].nunique():,}')
+
+        topUsers = userStats.sort_values('totalAuths',ascending=False).head(10)
+        print(f'Top 10 users:\n{topUsers[['totalAuths','uniqueSources','uniqueDests']]}')
+
+        plt.figure()
+        plt.hist(userStats['totalAuths'],100,range=(0,userStats['totalAuths'].max()))
+        plt.title(f'Auth Events by User in Sample, median = {userStats['totalAuths'].median():.0f}')
+        plt.xlabel('Total Auth Events')
+        plt.ylabel('Counts')
+
+        compStats = self.dataSample.groupby('Destination Comp').agg(
+            {'Source User@Domain':'nunique','timeStamp':'count'})
+        compStats.columns = ['uniqueUsers','accessCount']
+
+        plt.figure()
+        plt.hist(np.log10(compStats['uniqueUsers']),100)
+        plt.title('Computer User Counts (log-scale)')
+        plt.xlabel('User Counts (log-scale)')
+        plt.ylabel('Count')
+        return userStats,compStats
+
+    def privilegeAccounts(self):
+        userCompAccess = self.dataSample.groupby('Source User@Domain')['Destination Comp'].nunique()
+        highAccessUsers = userCompAccess[userCompAccess > userCompAccess.quantile(0.95)]
+
+        print(f'Users with high access permissions: \n{highAccessUsers.sort_values(ascending=False).head(10)}')
+
+        serviceAccounts = self.dataSample['Source User@Domain'].str.contains(r'\$$',na=False)
+        print(f'\nSuspected service accounts: {serviceAccounts.sum():,}')
+
+        hourlyAct = self.dataSample.groupby('Hour').size()
+        lowActivityThresh = hourlyAct.quantile(0.25)
+        offHours = hourlyAct[hourlyAct<=lowActivityThresh].index
+        offHourMask = self.dataSample['Hour'].isin(offHours)
+        offHourUsers = self.dataSample[offHourMask]['Source User@Domain'].value_counts()
+
+        plt.figure(figsize=(10,10))
+        plt.bar(np.arange(0, 10, 1), offHourUsers.head(10).values, tick_label=offHourUsers.head(10).index)
+        plt.title('Top Off Hour Users')
+        plt.xlabel('Users')
+        plt.ylabel('Number of Events')
+        plt.xticks(np.arange(0,10,1),rotation=-45,fontsize='xx-small')
+
+        return highAccessUsers,offHourUsers
+
+    def networkTopology(self):
+        compConnections = self.dataSample.groupby(['Source Comp','Destination Comp']).size()
+        print(f'\nMost common connections:\n{compConnections.sort_values(ascending=False).head(10)}') #have to remove self connections...
+
+        sourceComps = set(self.dataSample['Source Comp'].unique())
+        destinationComps =set(self.dataSample['Destination Comp'].unique())
+
+        print(f'Source Comps: {len(sourceComps-destinationComps):,}')
+        print(f'Destination Comps: {len(destinationComps-sourceComps):,}')
+        print(f'Comps in Both: {len(sourceComps & destinationComps):,}')
+
+        connectionsIn = self.dataSample.groupby('Destination Comp')['Source Comp'].nunique()
+        likelyServers = connectionsIn[connectionsIn >= connectionsIn.quantile(0.95)]
+
+        print(f'Potential Servers:\n{likelyServers.sort_values(ascending=False).head(10)}')
+
+        return compConnections,likelyServers
+
 fileSet = ['dns.txt','flows.txt','redteam.txt','proc.txt','auth.txt']
 colSet = [['Time','Source Comp','Comp Resolved'],
           ['Time','Duration','Source Comp','Source Port','Destination Comp','Destination Port','Protocol','Packet Count','Byte Count'],
@@ -95,3 +165,11 @@ colSet = [['Time','Source Comp','Comp Resolved'],
           ['Time','Source User@Domain','Destination User @Domain','Source Comp','Destination Comp','Auth Type','Logon Type','Auth Orientation','Success/Fail']]
 
 dataFolder = '/home/dylan/Documents/APTDetection/Data/'
+
+test = dataExploration(dataFolder)
+test.loadDataSample(fileSet[-1],colSet[-1])
+test.convertDataCat()
+test.temporalAnalysis()
+test.userAnalysis()
+test.privilegeAccounts()
+test.networkTopology()
