@@ -13,7 +13,8 @@ class dataExploration:
         self.dataPath=Path(dataPath)
         self.dataSample = None
 
-    def loadDataSample(self,fileName,fileCols,sampleSize=85000000):#85 million is about the limit of this pc
+    def loadDataSample(self,fileName,fileCols,sampleSize=85000000):
+        print('Loading data sample')#85 million is about the limit of this pc
         self.dataSample = pd.read_csv(self.dataPath/fileName,sep=',',names=fileCols,nrows=sampleSize)
         print(f'Sample uses: {self.dataSample.memory_usage(deep=True).sum()/1024**2:.2f} MB')
         return self.dataSample.head()
@@ -157,19 +158,63 @@ class dataExploration:
 
         return compConnections,likelyServers
 
-fileSet = ['dns.txt','flows.txt','redteam.txt','proc.txt','auth.txt']
-colSet = [['Time','Source Comp','Comp Resolved'],
-          ['Time','Duration','Source Comp','Source Port','Destination Comp','Destination Port','Protocol','Packet Count','Byte Count'],
-          ['Time','User@Domain','Source Comp','Destination Comp'],
-          ['Time','User@Domain','Comp','Process Name','Start/End'],
-          ['Time','Source User@Domain','Destination User @Domain','Source Comp','Destination Comp','Auth Type','Logon Type','Auth Orientation','Success/Fail']]
+    def authAnalysis(self):
+        if 'Auth Type' in self.dataSample.columns:
+            authTypes = self.dataSample['Auth Type'].value_counts()
+            plt.figure(figsize=(5,5))
+            plt.bar(np.arange(0,len(authTypes),1),authTypes.values,tick_label=authTypes.index)
+            plt.xticks(rotation=90,fontsize=8)
+            plt.tight_layout()
 
-dataFolder = '/home/dylan/Documents/APTDetection/Data/'
+        typeSuccess = self.dataSample.groupby('Auth Type')['Success/Fail'].apply(
+            lambda x: (x=='Success').mean() if 'Success' in x.values else 0
+        )
 
-test = dataExploration(dataFolder)
-test.loadDataSample(fileSet[-1],colSet[-1])
-test.convertDataCat()
-test.temporalAnalysis()
-test.userAnalysis()
-test.privilegeAccounts()
-test.networkTopology()
+        if 'Logon Type' in self.dataSample.columns:
+            logOnTypes = self.dataSample['Logon Type'].value_counts()
+            plt.figure(figsize=(5, 5))
+            plt.bar(np.arange(0, len(logOnTypes), 1), logOnTypes.values, tick_label=logOnTypes.index)
+            plt.xticks(rotation=90, fontsize=8)
+            plt.tight_layout()
+
+        if 'Success/Fail' in self.dataSample.columns:
+            failedAuths = self.dataSample[self.dataSample['Success/Fail']!='Success']
+            print(f'Failed Auth Rate: {len(failedAuths)/len(self.dataSample):.2f}')
+
+            userFails = failedAuths['Source User@Domain'].value_counts()
+            print(f'\nUsers with most fails:\n{userFails.head(10)}')
+
+        return authTypes,logOnTypes,failedAuths
+
+    def basicBaselines(self):
+        baseLines = {}
+
+        userBaselines = self.dataSample.groupby('Source User@Domain').agg({
+            'Hour':['mean','std'],
+            'Day':'mean',
+            'Destination Comp':'nunique',
+            'timeStamp':'count'
+        })
+        userBaselines.columns = ['hourMean','hourStd','dayMean','uniqueComps','totalAuths']
+        print(f'\nBasic user baselines:\n{userBaselines.describe()}')
+        baseLines['users'] = userBaselines
+
+        compBaselines = self.dataSample.groupby('Destination Comp').agg({
+            'Source User@Domain':'nunique',
+            'Hour':['mean','std'],
+            'timeStamp':'count'
+        })
+        compBaselines.columns = ['uniqueUsers','hourMean','hourStd','totalAuths']
+        print(f'\nBasic comp baselines:\n{compBaselines.describe()}')
+        baseLines['comps'] = compBaselines
+
+        hourlyBaselines = self.dataSample.groupby('Hour').size()
+        dailyBaselines = self.dataSample.groupby('Day').size()
+
+        baseLines['temporal'] = {
+            'hourlyPattern':hourlyBaselines,
+            'dailyPattern':dailyBaselines.mean(),
+            'dailyStd':dailyBaselines.std()
+        }
+
+        return baseLines
