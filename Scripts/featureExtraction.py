@@ -10,8 +10,6 @@ class featureExtraction:
     def __init__(self,baseLines,dataSample):
         self.baselines = baseLines
         self.dataSample = dataSample
-        self.features={}
-        self.scalars={}
 
     def temporalFeatures(self):
         print('Extracting temporal features...')
@@ -113,3 +111,130 @@ class featureExtraction:
             )
         print('Sequence features extracted')
         return seqFeatures
+
+    def behavioralFeatures(self,featureData):
+        print('Extracting behavioral features...')
+        behavFeatures = featureData.copy()
+        behavFeatures = behavFeatures.sort_values(['Source User@Domain','timeStamp'])
+        behavFeatures['userTotalAuths'] = behavFeatures.groupby('Source User@Domain').cumcount()+1
+
+        def expandNunique(clunker):
+            unqCounts = []
+            done = set()
+            for value in clunker:
+                done.add(value)
+                unqCounts.append(len(value))
+            return pd.Series(unqCounts,index=clunker.index)
+
+        behavFeatures['userUniqueComps'] = (
+            behavFeatures.groupby('Source User@Domain')['Destination Comp']
+            .apply(expandNunique)
+            .reset_index(level=0,drop=True)
+        )
+
+        def groupEntropy(group):
+            comps = group['Destination Comp'].values
+            n = len(comps)
+
+            if n<=1:
+                return pd.Series([0]*n,index=group.index)
+
+            unqComps = np.unique(comps)
+            compIds = {comp:id for id, comp in enumerate(unqComps)}
+            encComps = np.array([compIds[comp] for comp in comps])
+
+            entropy = np.zeros(n)
+            counts = np.zeros(len(unqComps))
+
+            for i in range(n):
+                counts[encComps[i]]+=1
+                total = i+1
+
+                if total==1:
+                    entropy[i] = 0
+                else:
+                    activeCounts = counts[counts>0]
+                    prob = activeCounts/total
+                    entropy[i] = -np.sum(prob*np.log2(prob))
+            return pd.Series(entropy,index=group.index)
+
+        behavFeatures['userAccessEntropy'] = (
+            behavFeatures.groupby('Source User@Domain')
+            .apply(groupEntropy)
+            .reset_index(level=0,drop=True)
+        )
+
+        userBaselines = self.baselines['baselineResults']['users']
+        behavFeatures['deviationFromStandardComps'] = behavFeatures.apply(
+            lambda row: abs(
+                row['userUniqueComps'] -
+                userBaselines.loc[row['Source User@Domain'],'uniqueComps']
+            ) if row['Source User@Domain'] in userBaselines.index else 0, axis=1
+        )
+
+        behavFeatures['activityRatio'] = behavFeatures.apply(
+            lambda row: row['userTotalAuths']/
+            userBaselines.loc[row['Source User@Domain'],'totalAuths']
+            if row['Source User@Domain'] in userBaselines.index else 1.0, axis=1
+        )
+
+        behavFeatures['newUserComp'] = ~behavFeatures.duplicated(
+            subset=['Source User@Domain','Destination Comp'], keep='first'
+        )
+
+        behavFeatures['userAuthConsistency'] = behavFeatures.groupby('Source User@Domain')['Auth Type'].transform(
+            lambda x: (x==x.iloc[0]).cumsum()/(x.index - x.index[0]+1)
+        )
+
+        print('Behavioral features extracted')
+        return behavFeatures
+
+    def computerAccessFeatures(self,featureData):
+        print('Extracting computer access features...')
+        compFeatures = featureData.copy()
+        compAccessCounts = compFeatures['Destination Comp'].value_counts()
+        compUserCounts = compFeatures.groupby('Destination Comp')['Source User@Domain'].nunique()
+
+        compFeatures['compPopularity'] = compFeatures['Destination Comp'].map(
+            compAccessCounts
+        )
+
+        compFeatures['compUserDiversity'] = compFeatures['Destination Comp'].map(
+            compUserCounts
+        )
+
+        compFeatures['rareComp'] = (
+            compFeatures['compPopularity']<compAccessCounts.quantile(0.1)
+        ).astype(int)
+
+        compFeatures['highValueTarget'] = (
+            compFeatures['compUserDiversity']>compUserCounts.quantile(0.9)
+        ).astype(int)
+
+        compFeatures['firstAccess'] = ~compFeatures.duplicated(
+            subset=['Destination Comp'], keep='first'
+        )
+
+        compFeatures = compFeatures.sort_values(['Destination Comp','timeStamp'])
+
+        compFeatures['minuteBin'] = compFeatures['timeStamp'].dt.floor('1min')
+        compUsersMin = compFeatures.groupby(['Destination Comp','minuteBin'])['Source User@Domain'].nunique().reset_index()
+        compUsersMin.columns = ['Destination Comp','minuteBin','newUsersPerMin']
+        compUsersMin = compUsersMin.sort_values(['Destination Comp','minuteBin'])
+
+        compRoll = compUsersMin.groupby('Destination Comp').apply(
+            lambda group: group.assign(
+                newUsersCompHour = group['newUsersPerMin'].rolling(60,min_periods=1).sum()
+            )
+        ).reset_index(drop=True)
+
+        compFeatures = compFeatures.merge(
+            compRoll[['Destination Comp','minuteBin','newUsersPerMin']],
+            on=['Destination Comp','minuteBin'],
+            how='left',
+        )
+
+        compFeatures = compFeatures.drop('minuteBin',axis=1)
+
+        print('Computer access features extracted')
+        return compFeatures
