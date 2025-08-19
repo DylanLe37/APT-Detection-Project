@@ -238,3 +238,44 @@ class featureExtraction:
 
         print('Computer access features extracted')
         return compFeatures
+
+    def networkFeatures(self,featureData):
+        print('Extracting network features...')
+        netFeatures = featureData.copy()
+
+        netGraph = nx.from_pandas_edgelist(
+            netFeatures,
+            source='Source Comp',
+            target='Destination Comp',
+            create_using=nx.DiGraph()
+        )
+
+        inDegreeCentrality =  nx.in_degree_centrality(netGraph)
+        outDegreeCentrality = nx.out_degree_centrality(netGraph)
+        betweennessCentrality = nx.betweenness_centrality(netGraph)
+
+        netFeatures['destInDegree'] = netFeatures['Destination Comp'].map(inDegreeCentrality).fillna(0)
+        netFeatures['sourceOutDegree'] = netFeatures['Source Comp'].map(outDegreeCentrality).fillna(0)
+        netFeatures['destBetweenness'] = netFeatures['Destination Comp'].map(betweennessCentrality).fillna(0)
+
+        clustering = nx.clustering(netGraph.to_undirected())
+        netFeatures['destClusteringCoeff'] = netFeatures['Destination Comp'].map(clustering).fillna(0)
+
+        sourceDestPairs = netFeatures[['Source Comp','Destination Comp']].copy()
+        pairCount = sourceDestPairs.groupby(['Source Comp','Destination Comp']).size()
+        sourceComps = pairCount.index.get_level_values(0).astype(str)
+        destComps = pairCount.index.get_level_values(1).astype(str)
+
+        crossComp = sourceComps != destComps
+        crossCompCount = pairCount[crossComp]
+
+        thresh = crossCompCount.quantile(0.1) #dataset I can work with is too small, may not pick up anything here...
+        rarePair = set(pairCount[pairCount<thresh].index)
+
+        netFeatures['uncommonPath'] = [
+            1 if (row['Source Comp'], row['Destination Comp']) in rarePair else 0
+            for _, row in netFeatures[['Source Comp','Destination Comp']].iterrows()
+        ]
+
+        print('Network features extracted')
+        return netFeatures

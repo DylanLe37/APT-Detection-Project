@@ -6,7 +6,7 @@ def objectToCat(dataFrame):
                       dataFrame.select_dtypes(['object']).apply(pd.Series.astype,dtype='category')]
                      ,axis=1).reindex(dataFrame.columns,axis=1)
 
-def runInitialExploration(dataFolder,dataInd=4,sampleSize=85000000):
+def runInitialExploration(dataFolder,dataInd=4,sampleSize=5000000): #need more ram...
     fileSet = ['dns.txt', 'flows.txt', 'redteam.txt', 'proc.txt', 'auth.txt']
     colSet = [['Time', 'Source Comp', 'Comp Resolved'],
               ['Time', 'Duration', 'Source Comp', 'Source Port', 'Destination Comp', 'Destination Port', 'Protocol',
