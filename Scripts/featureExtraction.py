@@ -182,8 +182,11 @@ class featureExtraction:
             subset=['Source User@Domain','Destination Comp'], keep='first'
         )
 
-        behavFeatures['userAuthConsistency'] = behavFeatures.groupby('Source User@Domain')['Auth Type'].transform(
-            lambda x: (x==x.iloc[0]).cumsum()/(x.index - x.index[0]+1)
+        behavFeatures = behavFeatures.reset_index(drop=True)
+
+        behavFeatures['userAuthConsistency'] = (
+            behavFeatures.groupby('Source User@Domain')['Auth Type']
+            .transform(lambda x: (x==x.iloc[0]).cumsum()/np.arange(1,len(x)+1) if len(x)>0 else pd.Series([]))
         )
 
         print('Behavioral features extracted')
@@ -279,3 +282,35 @@ class featureExtraction:
 
         print('Network features extracted')
         return netFeatures
+
+    def graphFeatures(self,featureData):
+        print('Extracting graph features...')
+        userGraphFeatures = featureData.copy()
+
+        userCompEdges = userGraphFeatures[['Source User@Domain','Destination Comp']].drop_duplicates()
+        userGraph = nx.Graph()
+        userGraph.add_nodes_from(userGraphFeatures['Source User@Domain'].unique(),bipartite=0)
+        userGraph.add_nodes_from(userGraphFeatures['Destination Comp'].unique(),bipartite=1)
+        userGraph.add_edges_from(userCompEdges.values)
+
+        userDeg = dict(userGraph.degree())
+        userGraphFeatures['userDegBipartite'] = userGraphFeatures['Source User@Domain'].map(userDeg).fillna(0)
+
+        compDeg = dict(userGraph.degree())
+        userGraphFeatures['compDegBipartite'] = userGraphFeatures['Destination Comp'].map(compDeg).fillna(0)
+
+        comms = nx.community.greedy_modularity_communities(userGraph)
+        nodeToComm = {}
+        for i,comms in enumerate(comms):
+            for node in comms:
+                nodeToComm[node] = i
+
+        userGraphFeatures['userCommunity'] = userGraphFeatures['Source User@Domain'].map(nodeToComm).fillna(-1)
+        userGraphFeatures['compCommunity'] = userGraphFeatures['Destination Comp'].map(nodeToComm).fillna(-1)
+
+        userGraphFeatures['crossCommunity'] = (
+            userGraphFeatures['userCommunity'] != userGraphFeatures['compCommunity']
+        ).astype(int)
+
+        print('Graph features extracted')
+        return userGraphFeatures

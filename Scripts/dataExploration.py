@@ -23,6 +23,19 @@ class dataExploration:
         self.dataSample = utils.objectToCat(self.dataSample)
         return self.dataSample.dtypes
 
+    def removeServiceAccs(self):
+        userFilter = (
+            self.dataSample['Source User@Domain'].str.startswith('U', na=False) &
+            ~self.dataSample['Source User@Domain'].str.contains(r'\$', na=False) &
+            ~self.dataSample['Source User@Domain'].str.contains(
+                r'SYSTEM@|ANONYMOUS|LOCAL SERVICE', na=False, case=False
+            )
+        )
+
+        self.dataSample = self.dataSample[userFilter].reset_index(drop=True)
+
+        return self.dataSample.head()
+
     def dataStructure(self):
         print('Basic Info:')
         print(self.dataSample.info())
@@ -110,7 +123,7 @@ class dataExploration:
         compStats.columns = ['uniqueUsers','accessCount']
 
         plt.figure()
-        plt.hist(np.log10(compStats['uniqueUsers']),100)
+        plt.hist(np.log1p(compStats['uniqueUsers']),100)
         plt.title('Computer User Counts (log-scale)')
         plt.xlabel('User Counts (log-scale)')
         plt.ylabel('Count')
