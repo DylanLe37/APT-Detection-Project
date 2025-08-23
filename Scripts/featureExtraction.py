@@ -314,3 +314,69 @@ class featureExtraction:
 
         print('Graph features extracted')
         return userGraphFeatures
+
+    def authenticationFeatures(self,featureData):
+        print('Extracting authentication features...')
+        authFeatures = featureData.copy()
+
+        authFeatures['successFlag'] = (authFeatures['Success/Fail']=='Success').astype(int)
+        authFeatures['failFlag'] = (authFeatures['successFlag'] ==0).astype(int)
+
+        authFeatures = authFeatures.sort_values(['Source User@Domain','timeStamp'])
+        authFeatures['consecutiveFails'] = (
+            authFeatures.groupby(['Source User@Domain',authFeatures['successFlag'].ne(authFeatures['successFlag'].shift()).cumsum()])['failFlag']
+            .cumsum()
+            .where(authFeatures['successFlag']==0,0)
+        )
+
+        authFeatures['successAfterFail'] = (
+            (authFeatures['successFlag']==1)&
+            (authFeatures['consecutiveFails'].shift(1)>0)
+        ).astype(int)
+
+        failedAuths = authFeatures[authFeatures['successFlag']==0].copy()
+        failedAuths['minBin'] = failedAuths['timeStamp'].dt.floor('1min')
+        failedMinCounts = failedAuths.groupby(['Source User@Domain','minBin']).size().reset_index()
+        failedMinCounts.columns=['Source User@Domain','minBin','failedAuthsMin']
+        failedMinCounts = failedMinCounts.sort_values(['Source User@Domain','minBin'])
+
+        failedRoll = failedMinCounts.groupby('Source User@Domain').apply(
+            lambda group: group.assign(
+                failedAuthsHour = group['failedAuthsMin'].rolling(60,min_periods=1).sum()
+            )
+        ).reset_index(drop=True)
+
+        authFeatures['minBin'] = authFeatures['timeStamp'].dt.floor('1min')
+        authFeatures = authFeatures.merge(
+            failedRoll[['Source User@Domain','minBin','failedAuthsHour']],
+            on=['Source User@Domain','minBin'],
+            how='left'
+        )
+        authFeatures['failedAuthsHour'] = authFeatures['failedAuthsHour'].fillna(0)
+        authFeatures = authFeatures.drop('minBin',axis= 1)
+
+        failedAuthMask = (authFeatures['successFlag']==0) #can this be combined with above section?
+
+        failedAuthsUser = authFeatures[failedAuthMask].copy()
+        failedAuthsUser['hourBin'] = failedAuthsUser['timeStamp'].dt.floor('1H')
+
+        failedUserHour = (
+            failedAuthsUser.groupby('hourBin')['Source User@Domain']
+            .nunique()
+            .to_dict()
+        )
+
+        authFeatures['hourBin'] = authFeatures['timeStamp'].dt.floor('1H')
+        authFeatures['uniqueUsersFailSameTime'] = (
+            authFeatures.apply(
+                lambda row: failedUserHour.get(row['hourBin'],0)-1
+                if row['successFlag']==0 else 0,
+                axis=1
+            )
+        )
+        authFeatures = authFeatures.drop('hourBin',axis= 1)
+
+        print('Auth features extracted')
+        return authFeatures
+
+        
