@@ -1,5 +1,6 @@
 import pandas as pd
 import dataExploration as de
+import featureExtraction as fe
 
 def objectToCat(dataFrame):
     return pd.concat([dataFrame.select_dtypes([],['object']),
@@ -34,5 +35,18 @@ def runInitialExploration(dataFolder,dataInd=4,sampleSize=10000000): #need more 
         'authResults': authResults,
         'baselineResults': baselineResults,
     },dataExp.dataSample]
+
+def runFeatureExtraction(explorationResults):
+    featureExtractor = fe.featureExtraction(explorationResults[0],explorationResults[1])
+    featureData = featureExtractor.temporalFeatures()
+    featureData = featureExtractor.sequenceFeatures(featureData)
+    featureData = featureExtractor.behavioralFeatures(featureData)
+    featureData = featureExtractor.computerAccessFeatures(featureData)
+    featureData = featureExtractor.networkFeatures(featureData)
+    featureData = featureExtractor.graphFeatures(featureData)
+    featureData = featureExtractor.authenticationFeatures(featureData)
+    featureData = featureExtractor.anomalyFeatures(featureData)
+    featureVal = featureExtractor.featureValidate(featureData)
+    return featureData,featureVal
 
 dataFolder = '/home/dylan/Documents/APTDetection/Data/'

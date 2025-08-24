@@ -62,13 +62,14 @@ class featureExtraction:
             on=['Source User@Domain','minute'],
             how='left'
         )
-        tempFeatures = tempFeatures.drop('minute',axis=1)
 
         userAvgHours = self.baselines['baselineResults']['users']['hourMean'].to_dict()
         tempFeatures['userHourDeviation'] = tempFeatures.apply(
             lambda row: abs(row['Hour']-userAvgHours.get(row['Source User@Domain'], 12))
             ,axis=1
         )
+
+        tempFeatures = tempFeatures.drop('minute', axis=1)
         print('Temporal features extracted')
         return tempFeatures
 
@@ -109,6 +110,8 @@ class featureExtraction:
                 unqRollResults[f'uniqueDestLast{window}']
                 .reset_index(level=0,drop=True)
             )
+
+        seqFeatures = seqFeatures.drop(['prevDestComp','prevAuthType'],axis=1)
         print('Sequence features extracted')
         return seqFeatures
 
@@ -374,9 +377,75 @@ class featureExtraction:
                 axis=1
             )
         )
-        authFeatures = authFeatures.drop('hourBin',axis= 1)
+        authFeatures = authFeatures.drop(['hourBin','failFlag'],axis= 1)
 
         print('Auth features extracted')
         return authFeatures
 
-        
+    def anomalyFeatures(self,featureData):
+        print('Extracting anomaly features...')
+        anomFeatures = featureData.copy()
+
+        anomCols = ['timeSinceLastAuth','userAuthsPerHour','userAuthsPerDay','userTotalAuths','compPopularity']
+
+        for col in anomCols:
+            if col in anomFeatures.columns:
+                meanCol = anomFeatures[col].mean()
+                stdCol = anomFeatures[col].std()
+                anomFeatures[f'{col}ZScore']=(anomFeatures[col]-meanCol)/stdCol
+
+                anomFeatures[f'{col}Outlier'] = (
+                    (anomFeatures[col]<anomFeatures[col].quantile(0.01)) |
+                    (anomFeatures[col]>anomFeatures[col].quantile(0.99))
+                ).astype(int)
+
+        riskCols = ['newUserComp','rareComp','crossCommunity','destinationChange','rapidSeq','successAfterFail']
+        indicatorSet = [col for col in riskCols if col in anomFeatures.columns]
+        if indicatorSet:
+            anomFeatures['compositeRiskScore'] = anomFeatures[indicatorSet].sum(axis=1)
+        else:
+            anomFeatures['compositeRiskScore'] = 0
+
+        anomFeatures['minBin'] = anomFeatures['timeStamp'].dt.floor('1min')
+        anomFeatures['hourBin'] = anomFeatures['timeStamp'].dt.floor('1H')
+
+        riskPerMin = anomFeatures.groupby(['Source User@Domain','minBin'])['compositeRiskScore'].sum()
+        anomFeatures['riskCurrentMin'] = anomFeatures.set_index(['Source User@Domain','minBin']).index.map(riskPerMin).fillna(0)
+
+        riskPerHour = anomFeatures.groupby(['Source User@Domain','hourBin'])['compositeRiskScore'].sum()
+        anomFeatures['riskCurrentHour'] = anomFeatures.set_index(['Source User@Domain','hourBin']).index.map(riskPerHour).fillna(0)
+
+        anomFeatures = anomFeatures.drop(['minBin','hourBin'],axis=1)
+        print('Anomaly features extracted')
+        return anomFeatures
+
+    def featureValidate(self,featureData):
+        print('Validating features...')
+
+        numFeatures = featureData.select_dtypes(include=[np.number])
+        corrMat = numFeatures.corr()
+        highCorrPairs = []
+        for i in range(len(corrMat.columns)):
+            for j in range(i + 1, len(corrMat.columns)):
+                if abs(corrMat.iloc[i, j]) > 0.9:
+                    highCorrPairs.append((
+                        corrMat.columns[i],
+                        corrMat.columns[j],
+                        corrMat.iloc[i, j]
+                    ))
+
+        print(f"\nHighly correlated feature pairs (>0.9): {len(highCorrPairs)}")
+        for feat1, feat2, corr in highCorrPairs[:5]:
+            print(f"  {feat1} <-> {feat2}: {corr:.3f}")
+
+        featureVars = numFeatures.var().sort_values(ascending=False)
+        print(f"\nTop 10 features by variance:")
+        for feat, var in numFeatures.head(10).items():
+            print(f"  {feat}: {var:.6f}")
+
+        return {
+            'corrMat' : corrMat,
+            'highCorrPairs' : highCorrPairs,
+            'featureVars' : featureVars,
+            'memoryUsage': featureData.memory_usage(deep=True)/1024**2
+        }
