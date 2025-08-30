@@ -70,6 +70,7 @@ class featureExtraction:
         )
 
         tempFeatures = tempFeatures.drop('minute', axis=1)
+        tempFeatures = tempFeatures.sort_values('Time').reset_index(drop=True)
         print('Temporal features extracted')
         return tempFeatures
 
@@ -112,6 +113,7 @@ class featureExtraction:
             )
 
         seqFeatures = seqFeatures.drop(['prevDestComp','prevAuthType'],axis=1)
+        seqFeatures = seqFeatures.sort_values('Time').reset_index(drop=True)
         print('Sequence features extracted')
         return seqFeatures
 
@@ -192,6 +194,7 @@ class featureExtraction:
             .transform(lambda x: (x==x.iloc[0]).cumsum()/np.arange(1,len(x)+1) if len(x)>0 else pd.Series([]))
         )
 
+        behavFeatures = behavFeatures.sort_values('Time').reset_index(drop=True)
         print('Behavioral features extracted')
         return behavFeatures
 
@@ -241,7 +244,7 @@ class featureExtraction:
         )
 
         compFeatures = compFeatures.drop('minuteBin',axis=1)
-
+        compFeatures = compFeatures.sort_values('Time').reset_index(drop=True)
         print('Computer access features extracted')
         return compFeatures
 
@@ -379,6 +382,7 @@ class featureExtraction:
         )
         authFeatures = authFeatures.drop(['hourBin','failFlag'],axis= 1)
 
+        authFeatures = authFeatures.sort_values('Time').reset_index(drop=True)
         print('Auth features extracted')
         return authFeatures
 
@@ -416,6 +420,7 @@ class featureExtraction:
         anomFeatures['riskCurrentHour'] = anomFeatures.set_index(['Source User@Domain','hourBin']).index.map(riskPerHour).fillna(0)
 
         anomFeatures = anomFeatures.drop(['minBin','hourBin'],axis=1)
+        anomFeatures = anomFeatures.sort_values('Time').reset_index(drop=True)
         print('Anomaly features extracted')
         return anomFeatures
 
@@ -436,12 +441,10 @@ class featureExtraction:
 
         print(f"\nHighly correlated feature pairs (>0.9): {len(highCorrPairs)}")
         for feat1, feat2, corr in highCorrPairs[:5]:
-            print(f"  {feat1} <-> {feat2}: {corr:.3f}")
+            print(f"  {feat1},{feat2}: {corr:.3f}")
 
         featureVars = numFeatures.var().sort_values(ascending=False)
-        print(f"\nTop 10 features by variance:")
-        for feat, var in numFeatures.head(10).items():
-            print(f"  {feat}: {var:.6f}")
+
 
         return {
             'corrMat' : corrMat,

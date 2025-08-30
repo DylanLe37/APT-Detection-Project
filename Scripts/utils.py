@@ -1,6 +1,8 @@
 import pandas as pd
+from pathlib import Path
 import dataExploration as de
 import featureExtraction as fe
+import detectionModels as dm
 
 def objectToCat(dataFrame):
     return pd.concat([dataFrame.select_dtypes([],['object']),
@@ -14,11 +16,11 @@ def runInitialExploration(dataFolder,dataInd=4,sampleSize=10000000): #need more 
                'Packet Count', 'Byte Count'],
               ['Time', 'User@Domain', 'Source Comp', 'Destination Comp'],
               ['Time', 'User@Domain', 'Comp', 'Process Name', 'Start/End'],
-              ['Time', 'Source User@Domain', 'Destination User @Domain', 'Source Comp', 'Destination Comp', 'Auth Type',
+              ['Time', 'Source User@Domain', 'Destination User@Domain', 'Source Comp', 'Destination Comp', 'Auth Type',
                'Logon Type', 'Auth Orientation', 'Success/Fail']]
 
     dataExp = de.dataExploration(dataFolder)
-    dataExp.loadDataSample(fileSet[dataInd],colSet[dataInd],sampleSize)
+    dataExp.loadDataSample(fileSet[dataInd],colSet[dataInd],Path(dataFolder)/fileSet[2],sampleSize)
     dataExp.convertDataCat()
     dataExp.removeServiceAccs()
     dataExp.temporalAnalysis()
@@ -48,5 +50,13 @@ def runFeatureExtraction(explorationResults):
     featureData = featureExtractor.anomalyFeatures(featureData)
     featureVal = featureExtractor.featureValidate(featureData)
     return featureData,featureVal
+
+def buildDetectionModels(featureResults,dataFolder):
+    redTeamPath = Path(dataFolder)/'redteam.txt'
+    detectionModel = dm.DetectionModels(featureResults,redTeamPath=redTeamPath)
+
+
+    return
+
 
 dataFolder = '/home/dylan/Documents/APTDetection/Data/'
