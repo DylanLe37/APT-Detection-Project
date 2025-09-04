@@ -50,4 +50,74 @@ class detectionModel:
 
         seqCount = self.featureData['attackSeq'].sum()
         print(f'Attack sequences: {seqCount:,} ({seqCount / len(self.featureData):.4f}%)')
-        return self.featureData
+        return
+
+    def modelFeatures(self):
+        print('Generating model features')
+
+        numCols = self.featureData.select_dtypes(include=[np.number]).columns
+        excludeSet = ['isAttack','attackSeq','Time','timeStamp','Source User@Domain','Destination Comp','Source Comp']
+        includeSet = [feature for feature in numCols
+                      if not feature in excludeSet]
+
+        featureMat = self.featureData[includeSet]
+        featureMat = featureMat.replace([np.inf, -np.inf], np.nan)
+        featureMat = featureMat.fillna(featureMat.median())
+
+        for col in featureMat.columns:
+            if featureMat[col].dtype == 'float64':
+                featureMat[col] = featureMat[col].astype('float32')
+
+        attackLabels = self.featureData['isAttack'].values
+        print(f'Class Imbalance (normal:attack) : {(1-attackLabels.mean())/attackLabels.mean():.1f}:1')
+
+        self.modelData = featureMat
+        self.modelLabels = attackLabels
+        self.modelCols = includeSet
+
+        return
+
+    def timeSeriesFeatures(self,seqLength = 10, maxUsers = 1000):
+        print('Generating time series features')
+
+        userCount = self.featureData['Source User@Domain'].value_counts()
+        topUsers = userCount.head(maxUsers).index
+
+        filteredData = self.featureData[self.featureData['Source User@Domain'].isin(topUsers)].copy()
+        sortedData = filteredData.sort_values(['Source User@Domain','Time']).reset_index(drop=True)
+
+        seq = []
+        labels = []
+        userSeq = 0
+
+        for user in topUsers:
+            userData = sortedData[sortedData['Source User@Domain'] == user]
+
+            if len(userData) < seqLength:
+                continue
+
+            userFeatures = userData[self.modelCols].values
+            userLabels = userData['isAttack'].values
+
+            maxSeqPerUser = 100
+            tau = max(1,len(userData) // maxSeqPerUser)
+
+            for i in range(0,len(userData)-seqLength+1,tau):
+                seq.append(userFeatures[i:i+seqLength])
+                labels.append(int(userLabels[i:i+seqLength].max()))
+
+            userSeq+=1
+            if userSeq % 100==0:
+                print(f'Processed {userSeq} users')
+
+        if seq:
+            seqData = np.array(seq,dtype=np.float32)
+            seqLabels = np.array(labels)
+
+            self.seqData = seqData
+            self.seqLabels = seqLabels
+
+        return
+
+    def isolationForest(self,contamination='auto',estimators = 50):
+        return
