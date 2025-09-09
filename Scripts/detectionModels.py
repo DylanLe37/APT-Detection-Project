@@ -4,7 +4,7 @@ import networkx as nx
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import StandardScaler, RobustScaler
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, precision_recall_curve
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, precision_recall_curve,precision_score,accuracy_score,recall_score,f1_score
 from sklearn.model_selection import train_test_split, TimeSeriesSplit
 from sklearn.linear_model import LogisticRegression
 import tensorflow as tf
@@ -52,7 +52,7 @@ class detectionModel:
         print(f'Attack sequences: {seqCount:,} ({seqCount / len(self.featureData):.4f}%)')
         return
 
-    def modelFeatures(self):
+    def modelFeatures(self,testSize = 0.3):
         print('Generating model features')
 
         numCols = self.featureData.select_dtypes(include=[np.number]).columns
@@ -75,9 +75,18 @@ class detectionModel:
         self.modelLabels = attackLabels
         self.modelCols = includeSet
 
+        dataTrain, dataTest, labelTrain, labelTest = train_test_split(
+            self.modelData, self.modelLabels, test_size = testSize, stratify=self.modelLabels, random_state = 2025
+        )
+
+        self.dataTrain = dataTrain
+        self.dataTest = dataTest
+        self.labelTrain = labelTrain
+        self.labelTest = labelTest
+
         return
 
-    def timeSeriesFeatures(self,seqLength = 10, maxUsers = 1000):
+    def timeSeriesFeatures(self,seqLength = 10, maxUsers = 1000, testSize = 0.3):
         print('Generating time series features')
 
         userCount = self.featureData['Source User@Domain'].value_counts()
@@ -117,7 +126,98 @@ class detectionModel:
             self.seqData = seqData
             self.seqLabels = seqLabels
 
+            seqTrain, seqTest, seqLabelsTrain, seqLabelsTest = train_test_split(
+                self.seqData,self.seqLabels,test_size = testSize, stratify=self.seqLabels, random_state = 2025
+            )
+
+            self.seqTrain = seqTrain
+            self.seqTest = seqTest
+            self.seqLabelsTrain = seqLabelsTrain
+            self.seqLabelsTest = seqLabelsTest
         return
 
+    def modelPerformance(self,modelName,groundTruth,preds,predScores=None,modelType='unsupervised'):
+
+        precision = precision_score(groundTruth,preds,zero_division=0)
+        recall = recall_score(groundTruth,preds,zero_division=0)
+        f1 = f1_score(groundTruth,preds,zero_division=0)
+
+        metrics = {'precision':precision,'recall':recall,'f1':f1}
+
+        if modelType == 'supervised':
+            metrics['accuracy'] = accuracy_score(groundTruth,preds)
+            metrics['confMat'] = confusion_matrix(groundTruth,preds)
+
+        if predScores is not None:
+            metrics['auc'] = roc_auc_score(groundTruth,predScores)
+        else:
+            metrics['auc'] = 0.5
+
+        self.performanceMetrics[modelName] = metrics
+
     def isolationForest(self,contamination='auto',estimators = 50):
+        print('Training isolation forest')
+
+        scaler = StandardScaler()
+        scaledTrainData = scaler.fit_transform(self.dataTrain)
+        scaledTestData = scaler.transform(self.dataTest)
+
+        contamination = max(0.001,min(0.1,self.labelTrain.mean()*2))
+
+        startTime = time.time()
+
+        isoForest = IsolationForest(
+            contamination = contamination,
+            n_estimators = estimators,
+            random_state = 2025,
+            n_jobs = -1,
+            max_samples='auto'
+        )
+        isoForest.fit(scaledTrainData)
+        trainTime = time.time()-startTime
+
+        print(f'Isolation forest training done in {trainTime:.2f} seconds')
+
+        preds = isoForest.predict(scaledTestData)
+        preds = (preds==-1).astype(int)
+        scores = isoForest.score_samples(scaledTestData)
+
+        self.modelPerformance('isolationForest',self.labelTest,preds,-scores,modelType='unsupervised')
+        self.models['isolationForest'] = isoForest
+        self.scalers['isolationForest'] = scaler
+
+        #performing kinda bad? maybe data issue
+        return
+
+    def SVM(self,nu='auto',gamma='scale'):
+        print('Training SVM')
+
+        scaler = RobustScaler()
+        scaledTrainData = scaler.fit_transform(self.dataTrain)
+        scaledTestData = scaler.transform(self.dataTest)
+
+        if nu == 'auto':
+            nu = max(0.01,min(0.1,self.labelTrain.mean()*3))
+
+        startTime = time.time()
+        svm = OneClassSVM(
+            nu = nu,
+            gamma = gamma,
+            kernel = 'rbf'
+        )
+
+        svm.fit(scaledTrainData)
+        trainingTime = time.time()-startTime
+        print(f'SVM training done in {trainingTime:.2f} seconds')
+
+        preds = svm.predict(scaledTestData)
+        scores = svm.decision_function(scaledTestData)
+
+        preds = (preds==-1).astype(int)
+
+        self.modelPerformance('SVM',self.labelTest,preds,-scores,modelType='unsupervised')
+        self.models['SVM'] = svm
+        self.scalers['SVM'] = scaler
+
+        #run while out, see how long takes, not finishing that fast, maybe need to subsample
         return
