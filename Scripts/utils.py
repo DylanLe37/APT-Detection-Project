@@ -53,10 +53,24 @@ def runFeatureExtraction(explorationResults):
 
 def buildDetectionModels(featureResults,dataFolder):
     redTeamPath = Path(dataFolder)/'redteam.txt'
-    detectionModel = dm.DetectionModels(featureResults,redTeamPath=redTeamPath)
+    models =['isolationForest','SVM','randomForest']
+    detectionModel = dm.detectionModels(featureResults,redTeamPath=redTeamPath)
+    detectionModel.groundTruthLabels()
+    detectionModel.modelFeatures()
+    detectionModel.timeSeriesFeatures()
+    detectionModel.trainIsoForest()
+    detectionModel.trainSVM()
+    detectionModel.trainRandomForest()
+    detectionModel.trainLSTM()
+    ensemblePreds,ensembleScores = detectionModel.ensembleModel()
 
-
-    return
+    return {
+        'detectionModel': detectionModel,
+        'models': detectionModel.models,
+        'performanceMetrics': detectionModel.performanceMetrics,
+        'ensemblePreds':ensemblePreds,
+        'ensembleScores':ensembleScores
+    }
 
 
 dataFolder = '/home/dylan/Documents/APTDetection/Data/'

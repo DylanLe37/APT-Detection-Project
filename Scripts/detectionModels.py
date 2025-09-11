@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import networkx as nx
-from sklearn.ensemble import IsolationForest, RandomForestClassifier
+from sklearn.ensemble import IsolationForest, RandomForestClassifier, RandomForestRegressor
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, precision_recall_curve,precision_score,accuracy_score,recall_score,f1_score
@@ -37,14 +37,14 @@ class detectionModel:
 
         for attackTime in attackTimes:
             attackMask = (
-                (self.featureData['Time'] >= attackTime - 300) &
-                (self.featureData['Time'] <= attackTime + 300)
+                (self.featureData['Time'] >= attackTime - 1800) &
+                (self.featureData['Time'] <= attackTime + 1800)
             )
             self.featureData.loc[attackMask,'isAttack'] = 1
 
             seqMask = (
-                (self.featureData['Time'] >= attackTime - 900) &
-                (self.featureData['Time'] <= attackTime + 900)
+                (self.featureData['Time'] >= attackTime - 1800) &
+                (self.featureData['Time'] <= attackTime + 1800)
             )
             self.featureData.loc[seqMask,'attackSeq'] = 1
 
@@ -155,14 +155,14 @@ class detectionModel:
 
         self.performanceMetrics[modelName] = metrics
 
-    def isolationForest(self,contamination='auto',estimators = 50):
+    def trainIsoForest(self,contamination='auto',estimators = 50):
         print('Training isolation forest')
 
         scaler = StandardScaler()
         scaledTrainData = scaler.fit_transform(self.dataTrain)
         scaledTestData = scaler.transform(self.dataTest)
 
-        contamination = max(0.001,min(0.1,self.labelTrain.mean()*2))
+        contamination = max(0.001,min(0.5,self.labelTrain.mean()*2))
 
         startTime = time.time()
 
@@ -189,10 +189,11 @@ class detectionModel:
         #performing kinda bad? maybe data issue
         return
 
-    def SVM(self,nu='auto',gamma='scale'):
+    def trainSVM(self,nu='auto',gamma='scale'):
         print('Training SVM')
 
         scaler = RobustScaler()
+
         scaledTrainData = scaler.fit_transform(self.dataTrain)
         scaledTestData = scaler.transform(self.dataTest)
 
@@ -220,4 +221,149 @@ class detectionModel:
         self.scalers['SVM'] = scaler
 
         #run while out, see how long takes, not finishing that fast, maybe need to subsample
+        #definitely need to subsample
         return
+
+    def trainRandomForest(self,estimators = 50,depth=10,weights='balanced'):
+        print('Training random forest')
+
+        scaler = StandardScaler()
+        scaledTrainData = scaler.fit_transform(self.dataTrain)
+        scaledTestData = scaler.transform(self.dataTest)
+
+        startTime = time.time()
+        randomForest = RandomForestClassifier(
+            n_estimators = estimators,
+            max_depth = depth,
+            class_weight = weights,
+            random_state = 2025,
+            n_jobs = -1,
+            max_features = 'sqrt'
+        )
+
+        randomForest.fit(scaledTrainData,self.labelTrain)
+        trainingTime = time.time()-startTime
+        print(f'Random forest training done in {trainingTime:.2f} seconds')
+
+        preds = randomForest.predict(scaledTestData)
+        predProb = randomForest.predict_proba(scaledTestData)[:,1]
+
+        self.modelPerformance('Random Forest',self.labelTest,preds,predProb,modelType='supervised')
+
+        self.models['randomForest'] = randomForest
+        self.scalers['randomForest'] = scaler
+        return
+
+    def trainLSTM(self,units=32,epochs=20,batchSize=64,dropout=0.3):
+        print('Training LSTM')
+
+        scaler = StandardScaler()
+
+        sampleCount,timeStepCount,featureCount = self.seqTrain.shape
+
+        dataTrainReshape = self.seqTrain.reshape(-1,featureCount)
+        scaledTrainData = scaler.fit_transform(dataTrainReshape)
+        scaledTrainData = scaledTrainData.reshape(sampleCount,timeStepCount,featureCount)
+
+        sampleCountTest = self.seqTest.shape[0]
+        dataTestReshape = self.seqTest.reshape(-1,featureCount)
+        scaledTestData = scaler.transform(dataTestReshape)
+        scaledTestData = scaledTestData.reshape(sampleCountTest,timeStepCount,featureCount)
+
+        lstmModel = Sequential([
+            LSTM(units,input_shape=(timeStepCount,featureCount)),
+            Dropout(dropout),
+            Dense(units//2,activation='relu'),
+            Dropout(dropout),
+            Dense(1,activation='sigmoid')
+        ])
+        lstmModel.compile(
+            optimizer='adam',
+            loss='binary_crossentropy',
+            metrics=['accuracy']
+        )
+        classWeights = {
+            0:1,
+            1:((len(self.seqLabelsTrain)-self.seqLabelsTrain.sum())/self.seqLabelsTrain.sum() if self.seqLabelsTrain.sum()>0 else 1)
+        }
+
+        startTime = time.time()
+
+        earlyStopping = EarlyStopping(
+            monitor='val_loss',
+            patience=5,
+            restore_best_weights=True
+        )
+
+        history = lstmModel.fit(
+            scaledTrainData,self.seqLabelsTrain,
+            validation_data = (scaledTestData,self.seqLabelsTest),
+            epochs = epochs,
+            batch_size = batchSize,
+            class_weight = classWeights,
+            callbacks = [earlyStopping],
+            verbose = 0
+        )
+
+        trainingTime = time.time()-startTime
+        print(f'LSTM training done in {trainingTime:.2f} seconds')
+
+        predProb = lstmModel.predict(scaledTestData).flatten()
+        preds = (predProb>0.5).astype(int)
+
+        self.modelPerformance('LSTM',self.seqLabelsTest,preds,predProb,modelType='supervised')
+
+        self.models['LSTM'] = lstmModel
+        self.scalers['LSTM'] = scaler
+
+        return
+
+    def ensembleModel(self,models):
+        print('Creating ensemble model')
+
+        ensemblePreds = {}
+        for modelName in models:
+            model = self.models[modelName]
+            scaler = self.scalers[modelName]
+
+            scaledTestData = scaler.transform(self.dataTest)
+
+            if modelName == 'isolationForest':
+                preds = model.predict(scaledTestData)
+                scores = model.score_samples(scaledTestData)
+                ensemblePreds[modelName] = {
+                    'binary':(preds==-1).astype(int),
+                    'scores':-scores
+                }
+
+            elif modelName == 'SVM':
+                preds = model.predict(scaledTestData)
+                scores = model.decision_function(scaledTestData)
+                ensemblePreds[modelName] = {
+                    'binary': (preds == -1).astype(int),
+                    'scores': -scores
+                }
+
+            elif modelName == 'randomForest':
+                binaryPreds = model.predict(scaledTestData)
+                probPreds = model.predict_proba(scaledTestData)[:,1]
+                ensemblePreds[modelName] = {
+                    'binary': binaryPreds,
+                    'scores': probPreds
+                }
+
+        binaryPreds = np.column_stack([
+            ensemblePreds[m]['binary'] for m in models
+        ])
+        scorePreds = np.column_stack([
+            ensemblePreds[m]['scores'] for m in models
+        ])
+
+        ensembleBinary = (binaryPreds.mean(axis=1)>0.5).astype(int)
+        ensembleScores = scorePreds.mean(axis=1)
+
+        self.modelPerformance('Ensemble',self.labelTest,ensembleBinary,ensembleScores,'unsupervised')
+
+        return ensembleBinary, ensembleScores
+
+
