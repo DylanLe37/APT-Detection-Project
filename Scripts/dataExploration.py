@@ -13,74 +13,153 @@ class dataExploration:
         self.dataPath=Path(dataPath)
         self.dataSample = None
 
-    def loadDataSample(self,fileName,fileCols,attackPath,sampleSize=8500000):
-        print('Loading data sample')
+    # def loadDataSample(self,fileName,fileCols,attackPath,sampleSize=8500000):
+    #     print('Loading data sample')
+    #
+    #     redTeamData = pd.read_csv(attackPath, sep=',', names=['Time', 'User@Domain', 'Source Comp', 'Destination Comp'])
+    #     attackTimes = set(redTeamData['Time'].values)
+    #
+    #     tau = 1800 #30min for 1h long windows around attacks?
+    #     attackWindows =[]
+    #     for attackTime in attackTimes:
+    #         attackWindows.append((attackTime-tau,attackTime+tau))
+    #
+    #     attackWindows.sort()
+    #     mergeWindows = [attackWindows[0]]
+    #     for windStart,windEnd in attackWindows[1:]:
+    #         prevStart,prevEnd = mergeWindows[-1]
+    #         if windStart <= prevEnd:
+    #             mergeWindows[-1] = (prevStart,max(prevEnd,windEnd))
+    #         else:
+    #             mergeWindows.append((windStart,windEnd))
+    #
+    #     attackWindSize = int(sampleSize*0.3)
+    #     normSize = sampleSize-attackWindSize
+    #
+    #     attackData = []
+    #     normData = []
+    #     totalProcessed = 0
+    #
+    #     for chunk in pd.read_csv(self.dataPath/fileName,sep=',',names=fileCols, chunksize=1000000):
+    #         chunkStart = chunk['Time'].min()
+    #         chunkEnd = chunk['Time'].max()
+    #
+    #         attackInChunk = any(
+    #             chunkStart <= windEnd and chunkEnd >= windStart
+    #             for windStart,windEnd in mergeWindows
+    #         )
+    #
+    #         if attackInChunk and len(attackData)*1000000<attackWindSize:
+    #             attackData.append(chunk)
+    #         elif not attackInChunk and len(normData)*1000000<normSize:
+    #             if totalProcessed %3 ==0:
+    #                 normData.append(chunk)
+    #
+    #         totalProcessed += 1
+    #
+    #         totalDat = sum(len(chunk) for chunk in attackData+normData)
+    #         if totalDat >= sampleSize:
+    #             break
+    #
+    #     if attackData:
+    #         attackDat = pd.concat(attackData,ignore_index=True)
+    #         if len(attackDat) > attackWindSize:
+    #             attackDat = attackDat.sample(n=attackWindSize,random_state=2025)
+    #     else:
+    #         attackDat = pd.DataFrame(columns=fileCols)
+    #
+    #     if normData:
+    #         normDat = pd.concat(normData,ignore_index=True)
+    #         remainingCapacity = sampleSize-len(attackData)
+    #         if len(normData)>remainingCapacity:
+    #             normDat = normDat.sample(n=remainingCapacity,random_state=2025)
+    #     else:
+    #         normDat = pd.DataFrame(columns=fileCols)
+    #
+    #     self.dataSample = pd.concat([attackDat,normDat],ignore_index=True)
+    #     self.dataSample = self.dataSample.sort_values('Time').reset_index(drop=True)
+    #
+    #     print(f'Attack periods: {len(attackDat):,} events ({len(attackDat)/len(self.dataSample)*100:.2f}%)')
+    #     print(f'Memory Usage: {self.dataSample.memory_usage(deep=True).sum()/1024**2:.2f} MB')
+    #
+    #     return self.dataSample.head()
 
-        redTeamData = pd.read_csv(attackPath, sep=',', names=['Time', 'User@Domain', 'Source Comp', 'Destination Comp'])
+    def loadDataSample(self, fileName, fileCols, attackPath, sampleSize=8500000, attackRatio=0.05, dayCount=21):
+        redTeamData = pd.read_csv(attackPath,sep=',',names=['Time', 'User@Domain', 'Source Comp', 'Destination Comp'])
+
+        attackStart = redTeamData['Time'].min()
+        attackEnd = redTeamData['Time'].max()
         attackTimes = set(redTeamData['Time'].values)
 
-        tau = 1800 #30min for 1h long windows around attacks?
-        attackWindows =[]
-        for attackTime in attackTimes:
-            attackWindows.append((attackTime-tau,attackTime+tau))
+        attackTarget = int(sampleSize*attackRatio)
+        normTarget = sampleSize-attackTarget
 
-        attackWindows.sort()
-        mergeWindows = [attackWindows[0]]
-        for windStart,windEnd in attackWindows[1:]:
-            prevStart,prevEnd = mergeWindows[-1]
-            if windStart <= prevEnd:
-                mergeWindows[-1] = (prevStart,max(prevEnd,windEnd))
-            else:
-                mergeWindows.append((windStart,windEnd))
+        attackEvents =[]
+        attacksFound = 0
 
-        attackWindSize = int(sampleSize*0.3)
-        normSize = sampleSize-attackWindSize
+        for chunkID,chunk in enumerate(pd.read_csv(self.dataPath/fileName,sep=',',names=fileCols,chunksize=500000)):
+            chunkAttacks = chunk[chunk['Time'].isin(attackTimes)]
+            if len(chunkAttacks)>0:
+                attackEvents.append(chunkAttacks)
+                attacksFound+=len(chunkAttacks)
 
-        attackData = []
-        normData = []
-        totalProcessed = 0
-
-        for chunk in pd.read_csv(self.dataPath/fileName,sep=',',names=fileCols, chunksize=1000000):
-            chunkStart = chunk['Time'].min()
-            chunkEnd = chunk['Time'].max()
-
-            attackInChunk = any(
-                chunkStart <= windEnd and chunkEnd >= windStart
-                for windStart,windEnd in mergeWindows
-            )
-
-            if attackInChunk and len(attackData)*1000000<attackWindSize:
-                attackData.append(chunk)
-            elif not attackInChunk and len(normData)*1000000<normSize:
-                if totalProcessed %3 ==0:
-                    normData.append(chunk)
-
-            totalProcessed += 1
-
-            totalDat = sum(len(chunk) for chunk in attackData+normData)
-            if totalDat >= sampleSize:
+            if chunk['Time'].min()>attackEnd:
                 break
 
-        if attackData:
-            attackDat = pd.concat(attackData,ignore_index=True)
-            if len(attackDat) > attackWindSize:
-                attackDat = attackDat.sample(n=attackWindSize,random_state=2025)
-        else:
-            attackDat = pd.DataFrame(columns=fileCols)
+        sessionStart = 1
+        sessionEnd = dayCount*24*3600
+        binWidth = 6*3600
+        binCount = (sessionEnd-sessionStart)//binWidth
+        eventDensity = normTarget//binCount
 
-        if normData:
-            normDat = pd.concat(normData,ignore_index=True)
-            remainingCapacity = sampleSize-len(attackData)
-            if len(normData)>remainingCapacity:
-                normDat = normDat.sample(n=remainingCapacity,random_state=2025)
-        else:
-            normDat = pd.DataFrame(columns=fileCols)
+        normEvents = []
+        binEvents ={i:0 for i in range(binCount)}
 
-        self.dataSample = pd.concat([attackDat,normDat],ignore_index=True)
+        for chunk in pd.read_csv(self.dataPath/fileName,sep=',',names=fileCols,chunksize=500000):#takes mad long bc sample many days
+            normChunk = chunk[~chunk['Time'].isin(attackTimes)]
+
+            if len(normChunk)>0:
+                normChunkCopy = normChunk.copy()
+                normChunkCopy['Bin'] = ((normChunkCopy['Time']-sessionStart)//binWidth).astype(int)
+
+                for binID in normChunkCopy['Bin'].unique():
+                    if binID in binEvents and binEvents[binID]<eventDensity:
+                        binDat = normChunkCopy[normChunkCopy['Bin'] == binID]
+                        needed = eventDensity-binEvents[binID]
+
+                        if len(binDat)<= needed:
+                            sampledBin = binDat.drop('Bin',axis=1)
+                            normEvents.append(sampledBin)
+                            binEvents[binID]+=len(sampledBin)
+                        else:
+                            sampledBin = binDat.sample(n=needed,random_state=2025).drop('Bin',axis=1)
+                            normEvents.append(sampledBin)
+                            binEvents[binID] = eventDensity
+
+            normTotal = sum(len(chunk) for chunk in normEvents)
+            if normTotal>=normTarget:
+                break
+
+        allAttacks = pd.concat(attackEvents,ignore_index=True)
+        if len(allAttacks)>attackTarget:
+            attackSamps = allAttacks.sample(n=attackTarget,random_state=2025)
+        else:
+            attackSamps = allAttacks
+
+        allNorm = pd.concat(normEvents,ignore_index=True)
+        if len(allNorm)>normTarget:
+            normSamps = allNorm.sample(n=normTarget,random_state=2025)
+        else:
+            normSamps = allNorm
+
+        self.dataSample = pd.concat([attackSamps,normSamps],ignore_index=True)
         self.dataSample = self.dataSample.sort_values('Time').reset_index(drop=True)
 
-        print(f'Attack periods: {len(attackDat):,} events ({len(attackDat)/len(self.dataSample)*100:.2f}%)')
-        print(f'Memory Usage: {self.dataSample.memory_usage(deep=True).sum()/1024**2:.2f} MB')
+        fullTimeRange = self.dataSample['Time'].max() - self.dataSample['Time'].min()
+        print(f'Total events: {len(self.dataSample):,}')
+        print(f'\n Attack Events: {len(attackSamps):,} ({len(attackSamps)/len(self.dataSample):,})')
+        print(f'\n Time span: {fullTimeRange/86400:.1f} days')
+
 
         return self.dataSample.head()
 

@@ -9,7 +9,7 @@ def objectToCat(dataFrame):
                       dataFrame.select_dtypes(['object']).apply(pd.Series.astype,dtype='category')]
                      ,axis=1).reindex(dataFrame.columns,axis=1)
 
-def runInitialExploration(dataFolder,dataInd=4,sampleSize=10000000): #need more ram...
+def runInitialExploration(dataFolder,dataInd=4,sampleSize=5000000): #need more ram...
     fileSet = ['dns.txt', 'flows.txt', 'redteam.txt', 'proc.txt', 'auth.txt']
     colSet = [['Time', 'Source Comp', 'Comp Resolved'],
               ['Time', 'Duration', 'Source Comp', 'Source Port', 'Destination Comp', 'Destination Port', 'Protocol',
@@ -44,7 +44,7 @@ def runFeatureExtraction(explorationResults):
     featureData = featureExtractor.sequenceFeatures(featureData)
     featureData = featureExtractor.behavioralFeatures(featureData)
     featureData = featureExtractor.computerAccessFeatures(featureData)
-    featureData = featureExtractor.networkFeatures(featureData)
+    # featureData = featureExtractor.networkFeatures(featureData)
     featureData = featureExtractor.graphFeatures(featureData)
     featureData = featureExtractor.authenticationFeatures(featureData)
     featureData = featureExtractor.anomalyFeatures(featureData)
