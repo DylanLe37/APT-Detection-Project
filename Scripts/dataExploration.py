@@ -5,7 +5,7 @@ import matplotlib as mpl
 mpl.use('Qt5Agg')
 from matplotlib import pyplot as plt
 import dask.dataframe as dd
-import utils
+import main
 from pathlib import Path
 
 class dataExploration:

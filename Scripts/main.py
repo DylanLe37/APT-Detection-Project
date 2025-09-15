@@ -44,25 +44,26 @@ def runFeatureExtraction(explorationResults):
     featureData = featureExtractor.sequenceFeatures(featureData)
     featureData = featureExtractor.behavioralFeatures(featureData)
     featureData = featureExtractor.computerAccessFeatures(featureData)
-    # featureData = featureExtractor.networkFeatures(featureData)
+    # featureData = featureExtractor.networkFeatures(featureData) #memory issue here, probably need to do more optimization...
     featureData = featureExtractor.graphFeatures(featureData)
     featureData = featureExtractor.authenticationFeatures(featureData)
     featureData = featureExtractor.anomalyFeatures(featureData)
     featureVal = featureExtractor.featureValidate(featureData)
     return featureData,featureVal
 
-def buildDetectionModels(featureResults,dataFolder):
+def buildDetectionModels(featureData,dataFolder):
     redTeamPath = Path(dataFolder)/'redteam.txt'
-    models =['isolationForest','SVM','randomForest']
-    detectionModel = dm.detectionModels(featureResults,redTeamPath=redTeamPath)
+    # models =['isolationForest','SVM','randomForest']
+    models = ['isolationForest','randomForest']
+    detectionModel = dm.detectionModels(featureData,redTeamPath=redTeamPath)
     detectionModel.groundTruthLabels()
     detectionModel.modelFeatures()
     detectionModel.timeSeriesFeatures()
     detectionModel.trainIsoForest()
-    detectionModel.trainSVM()
-    detectionModel.trainRandomForest()
-    detectionModel.trainLSTM()
-    ensemblePreds,ensembleScores = detectionModel.ensembleModel()
+    # detectionModel.trainSVM() #check if this finishes in a reasonable timeframe
+    detectionModel.trainRandomForest() #still way too accurate, have to check data again
+    detectionModel.trainLSTM() #literally useless now somehow, have to check data again
+    ensemblePreds,ensembleScores = detectionModel.ensembleModel(models)
 
     return {
         'detectionModel': detectionModel,
@@ -73,4 +74,7 @@ def buildDetectionModels(featureResults,dataFolder):
     }
 
 
-dataFolder = '/home/dylan/Documents/APTDetection/Data/'
+dataFolder = '/your/dataset/location/here/'
+results = runInitialExploration(dataFolder,sampleSize=3500000)
+featureData,featureValidation = runFeatureExtraction(results)
+modelResults = buildDetectionModels(featureData,dataFolder)

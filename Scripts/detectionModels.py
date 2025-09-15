@@ -16,9 +16,9 @@ import time
 import warnings
 warnings.filterwarnings('ignore')
 
-class detectionModel:
+class detectionModels:
     def __init__(self,featureData,redTeamPath=None):
-        self.featureData = featureData.copy()
+        self.featureData = featureData
         self.redTeamPath = redTeamPath
         self.models = {}
         self.scalers = {}
