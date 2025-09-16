@@ -1,0 +1,3 @@
+Project analyzing the [LANL Multisource Cybersecurity Dataset]([url](https://csr.lanl.gov/data/cyber1/)). The dataset is massive and contains multiple log files (auth, dns, flow, etc.) over the course of a 58 consecutive day recording period with labelled attacks from red team activity within the window.
+
+The project just seeks to process the data (I only did auth logs, since it's the biggest file and generally informative), construct some useful features, and train some models to perform attack detection. Once the dataset is downloaded and you place the location of the LANL dataset in main.py where labelled, then things should run stright through from main.
