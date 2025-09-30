@@ -4,11 +4,6 @@ import dataExploration as de
 import featureExtraction as fe
 import detectionModels as dm
 
-def objectToCat(dataFrame):
-    return pd.concat([dataFrame.select_dtypes([],['object']),
-                      dataFrame.select_dtypes(['object']).apply(pd.Series.astype,dtype='category')]
-                     ,axis=1).reindex(dataFrame.columns,axis=1)
-
 def runInitialExploration(dataFolder,dataInd=4,sampleSize=5000000): #need more ram...
     fileSet = ['dns.txt', 'flows.txt', 'redteam.txt', 'proc.txt', 'auth.txt']
     colSet = [['Time', 'Source Comp', 'Comp Resolved'],
@@ -60,7 +55,7 @@ def buildDetectionModels(featureData,dataFolder):
     detectionModel.modelFeatures()
     detectionModel.timeSeriesFeatures()
     detectionModel.trainIsoForest()
-    # detectionModel.trainSVM() #check if this finishes in a reasonable timeframe
+    #detectionModel.trainSVM() #SVM takes forever with this many data samples, but it does work f desired
     detectionModel.trainRandomForest() #still way too accurate, have to check data again
     detectionModel.trainLSTM() #literally useless now somehow, have to check data again
     ensemblePreds,ensembleScores = detectionModel.ensembleModel(models)
@@ -74,7 +69,7 @@ def buildDetectionModels(featureData,dataFolder):
     }
 
 
-dataFolder = '/your/dataset/location/here/'
+dataFolder = '/home/dylan/Documents/APTDetection/Data'
 results = runInitialExploration(dataFolder,sampleSize=3500000)
 featureData,featureValidation = runFeatureExtraction(results)
 modelResults = buildDetectionModels(featureData,dataFolder)

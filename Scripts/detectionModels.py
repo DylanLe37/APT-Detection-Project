@@ -56,7 +56,9 @@ class detectionModels:
         print('Generating model features')
 
         numCols = self.featureData.select_dtypes(include=[np.number]).columns
-        excludeSet = ['isAttack','attackSeq','Time','timeStamp','Source User@Domain','Destination Comp','Source Comp']
+        excludeSet = ['isAttack','attackSeq','Time','timeStamp','Source User@Domain','Destination Comp','Source Comp',
+                      'Day','timeStamp','Date','Hour','authsPerHour','authsPerDay','authsPerMin','workHours','newUsersPerMin',
+                      'userAuthsPerDay','userAuthsPerHour','riskCurrentHour','riskCurrentMin'] #drop temporal stuff mostly
         includeSet = [feature for feature in numCols
                       if not feature in excludeSet]
 

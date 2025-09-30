@@ -5,8 +5,12 @@ import matplotlib as mpl
 mpl.use('Qt5Agg')
 from matplotlib import pyplot as plt
 import dask.dataframe as dd
-import main
 from pathlib import Path
+
+def objectToCat(dataFrame):
+    return pd.concat([dataFrame.select_dtypes([],['object']),
+                      dataFrame.select_dtypes(['object']).apply(pd.Series.astype,dtype='category')]
+                     ,axis=1).reindex(dataFrame.columns,axis=1)
 
 class dataExploration:
     def __init__(self,dataPath):
@@ -164,7 +168,7 @@ class dataExploration:
         return self.dataSample.head()
 
     def convertDataCat(self):
-        self.dataSample = utils.objectToCat(self.dataSample)
+        self.dataSample = objectToCat(self.dataSample)
         return self.dataSample.dtypes
 
     def removeServiceAccs(self):
