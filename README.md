@@ -15,3 +15,7 @@ For model training, most temporal features actually had to be dropped as the siz
 
 
 The LSTM performs very well due to both its ability to read in sequence data and the fact that LSTMs are just much stronger models than the isolation and random forest approaches. The random forest also performed quite well on the task, though the poor performance of the isolation forest model does bring down the performance of the ensemble model (which in this case is just a weighted combination of the isolation+random forest). Likely this is because isolation forest is ill-suited to the task of detecting APTs, because their activity is not as easily separated from normal user behavior.
+
+
+## Concluding Remarks
+Using relatively simple models (random forest + a pretty shallow LSTM) we can achieve very high performance in detecting APTs. This enables fast analysis of auth logs to in an enterprise setting to prevent long lag times between when attacks occur and when the victim becomes aware of it.
