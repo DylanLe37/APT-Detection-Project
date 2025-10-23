@@ -11,3 +11,11 @@ Feature extraction/engineering was performed after some preprocessing (removing 
 For model training, most temporal features actually had to be dropped as the size of the datasample caused a bias in the models due to data leakage. I trained an isolation forest, random forest, and LSTM to perform predictions on whether an event was an attack event or normal operations, and calculated F1, accuracy, ROC-AUC, recall, and precision metrics. Then an ensemble model was constructed as a simple weighted sum of the model predictions. In practice, the ensemble model would be used in conjunction with all of the other models to flag logs as potentially containing attack events, in which case an investigator could examine the logs with more direct precision.
 
 ## Results
+![Results](https://github.com/DylanLe37/APT-Detection-Project/blob/main/Images/modelPerformance.png)
+
+
+The LSTM performs very well due to both its ability to read in sequence data and the fact that LSTMs are just much stronger models than the isolation and random forest approaches. The random forest also performed quite well on the task, though the poor performance of the isolation forest model does bring down the performance of the ensemble model (which in this case is just a weighted combination of the isolation+random forest). Likely this is because isolation forest is ill-suited to the task of detecting APTs, because their activity is not as easily separated from normal user behavior.
+
+
+## Concluding Remarks
+Using relatively simple models (random forest + a pretty shallow LSTM) we can achieve very high performance in detecting APTs. This enables fast analysis of auth logs to in an enterprise setting to prevent long lag times between when attacks occur and when the victim becomes aware of it.
