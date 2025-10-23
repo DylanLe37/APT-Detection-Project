@@ -14,7 +14,7 @@ For model training, most temporal features actually had to be dropped as the siz
 ![Results](https://github.com/DylanLe37/APT-Detection-Project/blob/main/Images/modelPerformance.png)
 
 
-The LSTM performs very well due to both its ability to read in sequence data and the fact that LSTMs are just much stronger models than the isolation and random forest approaches. The random forest also performed quite well on the task, though the poor performance of the isolation forest model does bring down the performance of the ensemble model (which in this case is just a weighted combination of the isolation+random forest). Likely this is because isolation forest is ill-suited to the task of detecting APTs, because their activity is not as easily separated from normal user behavior.
+The LSTM performs very well (84% accuracy and 0.94 auc) due to both its ability to read in sequence data and the fact that LSTMs are just much stronger models than the isolation and random forest approaches. The random forest also performed quite well on the task, though the poor performance of the isolation forest model does bring down the performance of the ensemble model (which in this case is just a weighted combination of the isolation+random forest). Likely this is because isolation forest is ill-suited to the task of detecting APTs, because their activity is not as easily separated from normal user behavior.
 
 
 ## Concluding Remarks
