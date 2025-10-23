@@ -247,12 +247,14 @@ class detectionModels:
         print(f'Attack Sequences:{seqLabels.sum():,} ({seqLabels.mean()*100:.2f}%)')
         print(f'Normal Sequences:{(seqLabels==0).sum():,} ({(1-seqLabels.mean())*100:.2f}%)')
 
+        seqData = np.nan_to_num(seqData,nan=0)
+
         self.seqData = seqData
         self.seqLabels = seqLabels
 
         seqTrain,seqTest,seqLabelsTrain,seqLabelsTest = train_test_split(
             seqData,seqLabels,
-            testSize=testSize,
+            test_size=testSize,
             stratify=seqLabels,
             random_state=2025
         )
@@ -446,7 +448,7 @@ class detectionModels:
     #
     #     return
 
-    def trainLSTM(self,units=64,epochs=30,batchSize=128,dropout=0.3,learning_rate=0.0005):
+    def trainLSTM(self,units=64,epochs=30,batchSize=128,dropout=0.3,learningRate=0.0005):
         print('Training LSTM')
 
         scaler = StandardScaler()
@@ -475,7 +477,7 @@ class detectionModels:
             Dense(1,activation='sigmoid')
         ])
 
-        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learningRate)
         lstmModel.compile(
             optimizer=optimizer,
             loss='binary_crossentropy',

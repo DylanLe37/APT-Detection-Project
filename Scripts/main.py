@@ -56,9 +56,9 @@ def buildDetectionModels(featureData,dataFolder):
     detectionModel.timeSeriesFeatures()
     detectionModel.trainIsoForest()
     #detectionModel.trainSVM() #SVM takes forever with this many data samples, but it does work f desired
-    detectionModel.trainRandomForest() #still way too accurate, have to check data again
-    detectionModel.trainLSTM() #literally useless now somehow, have to check data again
-    ensemblePreds,ensembleScores = detectionModel.ensembleModel(models)
+    detectionModel.trainRandomForest()
+    detectionModel.trainLSTM()
+    ensemblePreds,ensembleScores = detectionModel.ensembleModel(models) #don't add LSTM to ensemble model since it's sequence based unlike the others
 
     return {
         'detectionModel': detectionModel,
@@ -72,4 +72,3 @@ def buildDetectionModels(featureData,dataFolder):
 dataFolder = '/home/dylan/Documents/APTDetection/Data'
 results = runInitialExploration(dataFolder,sampleSize=3500000)
 featureData,featureValidation = runFeatureExtraction(results)
-modelResults = buildDetectionModels(featureData,dataFolder)
