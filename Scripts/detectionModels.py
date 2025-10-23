@@ -4,7 +4,7 @@ import networkx as nx
 from sklearn.ensemble import IsolationForest, RandomForestClassifier, RandomForestRegressor
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import StandardScaler, RobustScaler
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, precision_recall_curve,precision_score,accuracy_score,recall_score,f1_score
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score,roc_curve, precision_recall_curve,precision_score,accuracy_score,recall_score,f1_score
 from sklearn.model_selection import train_test_split, TimeSeriesSplit
 from sklearn.linear_model import LogisticRegression
 import tensorflow as tf
@@ -175,12 +175,19 @@ class detectionModels:
         normalLabels = []
 
         userAttackCounts = sortedData.groupby('Source User@Domain')['isAttack'].sum()
-        normalUsers = userAttackCounts[userAttackCounts==0].index.tolist()
+        # normalUsers = userAttackCounts[userAttackCounts==0].index.tolist()
+        #
+        # np.random.seed(2025)
+        # sampledUsers = np.random.choice(
+        #     normalUsers,
+        #     size=min(5000,len(normalUsers)),
+        #     replace=False
+        # )
 
-        np.random.seed(2025)
+        allUsers = sortedData['Source User@Domain'].unique()
         sampledUsers = np.random.choice(
-            normalUsers,
-            size=min(5000,len(normalUsers)),
+            allUsers,
+            size=min(5000,len(allUsers)),
             replace=False
         )
 
@@ -190,17 +197,18 @@ class detectionModels:
             userData = sortedData[sortedData['Source User@Domain']==user]
             # normalUserData = userData[userData['isAttack']==0]
 
-            # maxSeqs = min(seqsPerUser,(len(normalUserData)-seqLength+1))
+            maxSeqs = len(userData)-seqLength+1
+            maxSeqs = min(seqsPerUser,maxSeqs,20)
 
-            # if maxSeqs>0:
-            #     startPositions = np.random.choice(
-            #         len(normalUserData)-seqLength+1,
-            #         size=min(maxSeqs,20),
-            #         replace=False
-            #     )
+            if maxSeqs>0:
+                startPositions = np.random.choice(
+                    len(userData)-seqLength+1,
+                    size=maxSeqs,
+                    replace=False
+                )
 
                 for startPos in startPositions:
-                    seqData = normalUserData.iloc[startPos:startPos+seqLength]
+                    seqData = userData.iloc[startPos:startPos+seqLength]
 
                     if len(seqData)==seqLength:
                         seqFeatures = seqData[self.modelCols].values
@@ -270,6 +278,7 @@ class detectionModels:
 
         if predScores is not None:
             metrics['auc'] = roc_auc_score(groundTruth,predScores)
+            metrics['roc'] = roc_curve(groundTruth,predScores)
         else:
             metrics['auc'] = 0.5
 
@@ -306,7 +315,6 @@ class detectionModels:
         self.models['isolationForest'] = isoForest
         self.scalers['isolationForest'] = scaler
 
-        #performing kinda bad? maybe data issue
         return
 
     def trainSVM(self,nu='auto',gamma='scale'):
@@ -368,17 +376,80 @@ class detectionModels:
         preds = randomForest.predict(scaledTestData)
         predProb = randomForest.predict_proba(scaledTestData)[:,1]
 
-        self.modelPerformance('Random Forest',self.labelTest,preds,predProb,modelType='supervised')
+        self.modelPerformance('randomForest',self.labelTest,preds,predProb,modelType='supervised')
 
         self.models['randomForest'] = randomForest
         self.scalers['randomForest'] = scaler
         return
 
-    def trainLSTM(self,units=32,epochs=20,batchSize=64,dropout=0.3):
+    # def trainLSTM(self,units=32,epochs=20,batchSize=64,dropout=0.3):
+    #     print('Training LSTM')
+    #
+    #     scaler = StandardScaler()
+    #
+    #     sampleCount,timeStepCount,featureCount = self.seqTrain.shape
+    #
+    #     dataTrainReshape = self.seqTrain.reshape(-1,featureCount)
+    #     scaledTrainData = scaler.fit_transform(dataTrainReshape)
+    #     scaledTrainData = scaledTrainData.reshape(sampleCount,timeStepCount,featureCount)
+    #
+    #     sampleCountTest = self.seqTest.shape[0]
+    #     dataTestReshape = self.seqTest.reshape(-1,featureCount)
+    #     scaledTestData = scaler.transform(dataTestReshape)
+    #     scaledTestData = scaledTestData.reshape(sampleCountTest,timeStepCount,featureCount)
+    #
+    #     lstmModel = Sequential([
+    #         LSTM(units,input_shape=(timeStepCount,featureCount)),
+    #         Dropout(dropout),
+    #         Dense(units//2,activation='relu'),
+    #         Dropout(dropout),
+    #         Dense(1,activation='sigmoid')
+    #     ])
+    #     lstmModel.compile(
+    #         optimizer='adam',
+    #         loss='binary_crossentropy',
+    #         metrics=['accuracy']
+    #     )
+    #     classWeights = {
+    #         0:1,
+    #         1:((len(self.seqLabelsTrain)-self.seqLabelsTrain.sum())/self.seqLabelsTrain.sum() if self.seqLabelsTrain.sum()>0 else 1)
+    #     }
+    #
+    #     startTime = time.time()
+    #
+    #     earlyStopping = EarlyStopping(
+    #         monitor='val_loss',
+    #         patience=5,
+    #         restore_best_weights=True
+    #     )
+    #
+    #     history = lstmModel.fit(
+    #         scaledTrainData,self.seqLabelsTrain,
+    #         validation_data = (scaledTestData,self.seqLabelsTest),
+    #         epochs = epochs,
+    #         batch_size = batchSize,
+    #         class_weight = classWeights,
+    #         callbacks = [earlyStopping],
+    #         verbose = 0
+    #     )
+    #
+    #     trainingTime = time.time()-startTime
+    #     print(f'LSTM training done in {trainingTime:.2f} seconds')
+    #
+    #     predProb = lstmModel.predict(scaledTestData).flatten()
+    #     preds = (predProb>0.5).astype(int)
+    #
+    #     self.modelPerformance('LSTM',self.seqLabelsTest,preds,predProb,modelType='supervised')
+    #
+    #     self.models['LSTM'] = lstmModel
+    #     self.scalers['LSTM'] = scaler
+    #
+    #     return
+
+    def trainLSTM(self,units=64,epochs=30,batchSize=128,dropout=0.3,learning_rate=0.0005):
         print('Training LSTM')
 
         scaler = StandardScaler()
-
         sampleCount,timeStepCount,featureCount = self.seqTrain.shape
 
         dataTrainReshape = self.seqTrain.reshape(-1,featureCount)
@@ -390,31 +461,37 @@ class detectionModels:
         scaledTestData = scaler.transform(dataTestReshape)
         scaledTestData = scaledTestData.reshape(sampleCountTest,timeStepCount,featureCount)
 
+        weight0 = 1
+        weight1  = (len(self.seqLabelsTrain)-self.seqLabelsTrain.sum())/self.seqLabelsTrain.sum()
+        classWeights = {0:weight0,1:weight1}
+
         lstmModel = Sequential([
-            LSTM(units,input_shape=(timeStepCount,featureCount)),
+            LSTM(units,return_sequences=True,input_shape=(timeStepCount,featureCount)),
             Dropout(dropout),
-            Dense(units//2,activation='relu'),
+            LSTM(units//2),
+            Dropout(dropout),
+            Dense(units//4,activation='relu'),
             Dropout(dropout),
             Dense(1,activation='sigmoid')
         ])
-        lstmModel.compile(
-            optimizer='adam',
-            loss='binary_crossentropy',
-            metrics=['accuracy']
-        )
-        classWeights = {
-            0:1,
-            1:((len(self.seqLabelsTrain)-self.seqLabelsTrain.sum())/self.seqLabelsTrain.sum() if self.seqLabelsTrain.sum()>0 else 1)
-        }
 
-        startTime = time.time()
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        lstmModel.compile(
+            optimizer=optimizer,
+            loss='binary_crossentropy',
+            metrics=['accuracy',tf.keras.metrics.Precision(),tf.keras.metrics.Recall()]
+        )
+        print('\n LSTM Architecture:')
+        lstmModel.summary()
 
         earlyStopping = EarlyStopping(
             monitor='val_loss',
-            patience=5,
-            restore_best_weights=True
+            patience = 10,
+            restore_best_weights=True,
+            verbose = 1
         )
 
+        startTime = time.time()
         history = lstmModel.fit(
             scaledTrainData,self.seqLabelsTrain,
             validation_data = (scaledTestData,self.seqLabelsTest),
@@ -422,17 +499,16 @@ class detectionModels:
             batch_size = batchSize,
             class_weight = classWeights,
             callbacks = [earlyStopping],
-            verbose = 0
+            verbose = 1
         )
-
         trainingTime = time.time()-startTime
+
         print(f'LSTM training done in {trainingTime:.2f} seconds')
 
-        predProb = lstmModel.predict(scaledTestData).flatten()
+        predProb = lstmModel.predict(scaledTestData,verbose=0).flatten()
         preds = (predProb>0.5).astype(int)
 
         self.modelPerformance('LSTM',self.seqLabelsTest,preds,predProb,modelType='supervised')
-
         self.models['LSTM'] = lstmModel
         self.scalers['LSTM'] = scaler
 
