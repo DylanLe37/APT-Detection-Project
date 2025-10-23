@@ -11,4 +11,4 @@ Feature extraction/engineering was performed after some preprocessing (removing 
 For model training, most temporal features actually had to be dropped as the size of the datasample caused a bias in the models due to data leakage. I trained an isolation forest, random forest, and LSTM to perform predictions on whether an event was an attack event or normal operations, and calculated F1, accuracy, ROC-AUC, recall, and precision metrics. Then an ensemble model was constructed as a simple weighted sum of the model predictions. In practice, the ensemble model would be used in conjunction with all of the other models to flag logs as potentially containing attack events, in which case an investigator could examine the logs with more direct precision.
 
 ## Results
-[Model Performance](/Images/model_performance.png)
+[Model Performance](/Images/modelPerformance.png)
