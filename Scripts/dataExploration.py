@@ -89,6 +89,7 @@ class dataExploration:
     #     return self.dataSample.head()
 
     def loadDataSample(self, fileName, fileCols, attackPath, sampleSize=8500000, attackRatio=0.05, dayCount=21):
+        print('Loading data...')
         redTeamData = pd.read_csv(attackPath,sep=',',names=['Time', 'User@Domain', 'Source Comp', 'Destination Comp'])
 
         attackStart = redTeamData['Time'].min()
