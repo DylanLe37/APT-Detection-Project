@@ -19,3 +19,6 @@ The LSTM performs very well due to both its ability to read in sequence data and
 
 ## Concluding Remarks
 Using relatively simple models (random forest + a pretty shallow LSTM) we can achieve very high performance in detecting APTs. This enables fast analysis of auth logs to in an enterprise setting to prevent long lag times between when attacks occur and when the victim becomes aware of it.
+
+### How to run
+You can just clone the repo and add the LANL dataset path to the line in main.py.
