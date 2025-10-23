@@ -88,54 +88,172 @@ class detectionModels:
 
         return
 
-    def timeSeriesFeatures(self,seqLength = 10, maxUsers = 1000, testSize = 0.3):
+    # def timeSeriesFeatures(self,seqLength = 10, maxUsers = 1000, testSize = 0.3):
+    #     print('Generating time series features')
+    #
+    #     userCount = self.featureData['Source User@Domain'].value_counts()
+    #     topUsers = userCount.head(maxUsers).index
+    #
+    #     filteredData = self.featureData[self.featureData['Source User@Domain'].isin(topUsers)].copy()
+    #     sortedData = filteredData.sort_values(['Source User@Domain','Time']).reset_index(drop=True)
+    #
+    #     seq = []
+    #     labels = []
+    #     userSeq = 0
+    #
+    #     for user in topUsers:
+    #         userData = sortedData[sortedData['Source User@Domain'] == user]
+    #
+    #         if len(userData) < seqLength:
+    #             continue
+    #
+    #         userFeatures = userData[self.modelCols].values
+    #         userLabels = userData['isAttack'].values
+    #
+    #         maxSeqPerUser = 100
+    #         tau = max(1,len(userData) // maxSeqPerUser)
+    #
+    #         for i in range(0,len(userData)-seqLength+1,tau):
+    #             seq.append(userFeatures[i:i+seqLength])
+    #             labels.append(int(userLabels[i:i+seqLength].max()))
+    #
+    #         userSeq+=1
+    #         if userSeq % 100==0:
+    #             print(f'Processed {userSeq} users')
+    #
+    #     if seq:
+    #         seqData = np.array(seq,dtype=np.float32)
+    #         seqLabels = np.array(labels)
+    #
+    #         self.seqData = seqData
+    #         self.seqLabels = seqLabels
+    #
+    #         seqTrain, seqTest, seqLabelsTrain, seqLabelsTest = train_test_split(
+    #             self.seqData,self.seqLabels,test_size = testSize, stratify=self.seqLabels, random_state = 2025
+    #         )
+    #
+    #         self.seqTrain = seqTrain
+    #         self.seqTest = seqTest
+    #         self.seqLabelsTrain = seqLabelsTrain
+    #         self.seqLabelsTest = seqLabelsTest
+    #     return
+
+    def timeSeriesFeatures(self,seqLength=10,targetSequences=50000,attackRatio=0.15,testSize=0.3):
         print('Generating time series features')
 
-        userCount = self.featureData['Source User@Domain'].value_counts()
-        topUsers = userCount.head(maxUsers).index
+        sortedData = self.featureData.sort_values(['Source User@Domain','Time']).reset_index(drop=True)
 
-        filteredData = self.featureData[self.featureData['Source User@Domain'].isin(topUsers)].copy()
-        sortedData = filteredData.sort_values(['Source User@Domain','Time']).reset_index(drop=True)
+        targetAttackSeqs = int(targetSequences*attackRatio)
+        targetNormalSeqs = targetSequences-targetAttackSeqs
 
-        seq = []
-        labels = []
-        userSeq = 0
+        attackSeqs = []
+        attackLabels = []
 
-        for user in topUsers:
-            userData = sortedData[sortedData['Source User@Domain'] == user]
+        attackUserDat = sortedData[sortedData['isAttack']==1].groupby('Source User@Domain')
 
-            if len(userData) < seqLength:
-                continue
+        for user,userAttacks in attackUserDat:
+            userData = sortedData[sortedData['Source User@Domain']==user]
+            attackInds = userData[userData['isAttack']==1].index.tolist()
+            for attackID in attackInds:
+                userPos = userData.index.tolist()
+                if attackID in userPos:
+                    pos = userPos.index(attackID)
+                    startPos = max(0,pos-seqLength+1)
+                    endPos = startPos+seqLength
+                    if endPos<=len(userData):
+                        seqDat = userData.iloc[startPos:endPos]
+                        if len(seqDat)==seqLength:
+                            seqFeatures = seqDat[self.modelCols].values
+                            seqLabel = int(seqDat['isAttack'].max())
 
-            userFeatures = userData[self.modelCols].values
-            userLabels = userData['isAttack'].values
+                            attackSeqs.append(seqFeatures)
+                            attackLabels.append(seqLabel)
+            if len(attackSeqs)>=targetAttackSeqs:
+                break
 
-            maxSeqPerUser = 100
-            tau = max(1,len(userData) // maxSeqPerUser)
+        normalSeqs = []
+        normalLabels = []
 
-            for i in range(0,len(userData)-seqLength+1,tau):
-                seq.append(userFeatures[i:i+seqLength])
-                labels.append(int(userLabels[i:i+seqLength].max()))
+        userAttackCounts = sortedData.groupby('Source User@Domain')['isAttack'].sum()
+        normalUsers = userAttackCounts[userAttackCounts==0].index.tolist()
 
-            userSeq+=1
-            if userSeq % 100==0:
-                print(f'Processed {userSeq} users')
+        np.random.seed(2025)
+        sampledUsers = np.random.choice(
+            normalUsers,
+            size=min(5000,len(normalUsers)),
+            replace=False
+        )
 
-        if seq:
-            seqData = np.array(seq,dtype=np.float32)
-            seqLabels = np.array(labels)
+        seqsPerUser = targetNormalSeqs//len(sampledUsers)
 
-            self.seqData = seqData
-            self.seqLabels = seqLabels
+        for user in sampledUsers:
+            userData = sortedData[sortedData['Source User@Domain']==user]
+            # normalUserData = userData[userData['isAttack']==0]
 
-            seqTrain, seqTest, seqLabelsTrain, seqLabelsTest = train_test_split(
-                self.seqData,self.seqLabels,test_size = testSize, stratify=self.seqLabels, random_state = 2025
+            # maxSeqs = min(seqsPerUser,(len(normalUserData)-seqLength+1))
+
+            # if maxSeqs>0:
+            #     startPositions = np.random.choice(
+            #         len(normalUserData)-seqLength+1,
+            #         size=min(maxSeqs,20),
+            #         replace=False
+            #     )
+
+                for startPos in startPositions:
+                    seqData = normalUserData.iloc[startPos:startPos+seqLength]
+
+                    if len(seqData)==seqLength:
+                        seqFeatures = seqData[self.modelCols].values
+                        seqLabel = 0
+                        normalSeqs.append(seqFeatures)
+                        normalLabels.append(seqLabel)
+
+            if len(normalSeqs)>=targetNormalSeqs:
+                break
+
+        if len(attackSeqs)>targetAttackSeqs:
+            inds = np.random.choice(
+                len(attackSeqs),
+                targetAttackSeqs,
+                replace=False
             )
+            attackSeqs = [attackSeqs[i] for i in inds]
+            attackLabels = [attackLabels[i] for i in inds]
 
-            self.seqTrain = seqTrain
-            self.seqTest = seqTest
-            self.seqLabelsTrain = seqLabelsTrain
-            self.seqLabelsTest = seqLabelsTest
+        if len(normalSeqs)>targetNormalSeqs:
+            inds = np.random.choice(
+                len(normalSeqs),
+                targetNormalSeqs,
+                replace=False
+            )
+            normalSeqs = normalSeqs[inds]
+            normalLabels = normalLabels[inds]
+
+        allSeqs = attackSeqs+normalSeqs
+        allLabels = attackLabels+normalLabels
+
+        seqData = np.array(allSeqs,dtype='float32')
+        seqLabels = np.array(allLabels)
+
+        print(f'Total Sequences:{len(allSeqs):,}')
+        print(f'Attack Sequences:{seqLabels.sum():,} ({seqLabels.mean()*100:.2f}%)')
+        print(f'Normal Sequences:{(seqLabels==0).sum():,} ({(1-seqLabels.mean())*100:.2f}%)')
+
+        self.seqData = seqData
+        self.seqLabels = seqLabels
+
+        seqTrain,seqTest,seqLabelsTrain,seqLabelsTest = train_test_split(
+            seqData,seqLabels,
+            testSize=testSize,
+            stratify=seqLabels,
+            random_state=2025
+        )
+
+        self.seqTrain = seqTrain
+        self.seqTest = seqTest
+        self.seqLabelsTrain = seqLabelsTrain
+        self.seqLabelsTest = seqLabelsTest
+
         return
 
     def modelPerformance(self,modelName,groundTruth,preds,predScores=None,modelType='unsupervised'):
