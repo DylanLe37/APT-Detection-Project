@@ -88,56 +88,6 @@ class detectionModels:
 
         return
 
-    # def timeSeriesFeatures(self,seqLength = 10, maxUsers = 1000, testSize = 0.3):
-    #     print('Generating time series features')
-    #
-    #     userCount = self.featureData['Source User@Domain'].value_counts()
-    #     topUsers = userCount.head(maxUsers).index
-    #
-    #     filteredData = self.featureData[self.featureData['Source User@Domain'].isin(topUsers)].copy()
-    #     sortedData = filteredData.sort_values(['Source User@Domain','Time']).reset_index(drop=True)
-    #
-    #     seq = []
-    #     labels = []
-    #     userSeq = 0
-    #
-    #     for user in topUsers:
-    #         userData = sortedData[sortedData['Source User@Domain'] == user]
-    #
-    #         if len(userData) < seqLength:
-    #             continue
-    #
-    #         userFeatures = userData[self.modelCols].values
-    #         userLabels = userData['isAttack'].values
-    #
-    #         maxSeqPerUser = 100
-    #         tau = max(1,len(userData) // maxSeqPerUser)
-    #
-    #         for i in range(0,len(userData)-seqLength+1,tau):
-    #             seq.append(userFeatures[i:i+seqLength])
-    #             labels.append(int(userLabels[i:i+seqLength].max()))
-    #
-    #         userSeq+=1
-    #         if userSeq % 100==0:
-    #             print(f'Processed {userSeq} users')
-    #
-    #     if seq:
-    #         seqData = np.array(seq,dtype=np.float32)
-    #         seqLabels = np.array(labels)
-    #
-    #         self.seqData = seqData
-    #         self.seqLabels = seqLabels
-    #
-    #         seqTrain, seqTest, seqLabelsTrain, seqLabelsTest = train_test_split(
-    #             self.seqData,self.seqLabels,test_size = testSize, stratify=self.seqLabels, random_state = 2025
-    #         )
-    #
-    #         self.seqTrain = seqTrain
-    #         self.seqTest = seqTest
-    #         self.seqLabelsTrain = seqLabelsTrain
-    #         self.seqLabelsTest = seqLabelsTest
-    #     return
-
     def timeSeriesFeatures(self,seqLength=10,targetSequences=50000,attackRatio=0.15,testSize=0.3):
         print('Generating time series features')
 
@@ -175,14 +125,6 @@ class detectionModels:
         normalLabels = []
 
         userAttackCounts = sortedData.groupby('Source User@Domain')['isAttack'].sum()
-        # normalUsers = userAttackCounts[userAttackCounts==0].index.tolist()
-        #
-        # np.random.seed(2025)
-        # sampledUsers = np.random.choice(
-        #     normalUsers,
-        #     size=min(5000,len(normalUsers)),
-        #     replace=False
-        # )
 
         allUsers = sortedData['Source User@Domain'].unique()
         sampledUsers = np.random.choice(
@@ -195,7 +137,6 @@ class detectionModels:
 
         for user in sampledUsers:
             userData = sortedData[sortedData['Source User@Domain']==user]
-            # normalUserData = userData[userData['isAttack']==0]
 
             maxSeqs = len(userData)-seqLength+1
             maxSeqs = min(seqsPerUser,maxSeqs,20)
@@ -383,70 +324,6 @@ class detectionModels:
         self.models['randomForest'] = randomForest
         self.scalers['randomForest'] = scaler
         return
-
-    # def trainLSTM(self,units=32,epochs=20,batchSize=64,dropout=0.3):
-    #     print('Training LSTM')
-    #
-    #     scaler = StandardScaler()
-    #
-    #     sampleCount,timeStepCount,featureCount = self.seqTrain.shape
-    #
-    #     dataTrainReshape = self.seqTrain.reshape(-1,featureCount)
-    #     scaledTrainData = scaler.fit_transform(dataTrainReshape)
-    #     scaledTrainData = scaledTrainData.reshape(sampleCount,timeStepCount,featureCount)
-    #
-    #     sampleCountTest = self.seqTest.shape[0]
-    #     dataTestReshape = self.seqTest.reshape(-1,featureCount)
-    #     scaledTestData = scaler.transform(dataTestReshape)
-    #     scaledTestData = scaledTestData.reshape(sampleCountTest,timeStepCount,featureCount)
-    #
-    #     lstmModel = Sequential([
-    #         LSTM(units,input_shape=(timeStepCount,featureCount)),
-    #         Dropout(dropout),
-    #         Dense(units//2,activation='relu'),
-    #         Dropout(dropout),
-    #         Dense(1,activation='sigmoid')
-    #     ])
-    #     lstmModel.compile(
-    #         optimizer='adam',
-    #         loss='binary_crossentropy',
-    #         metrics=['accuracy']
-    #     )
-    #     classWeights = {
-    #         0:1,
-    #         1:((len(self.seqLabelsTrain)-self.seqLabelsTrain.sum())/self.seqLabelsTrain.sum() if self.seqLabelsTrain.sum()>0 else 1)
-    #     }
-    #
-    #     startTime = time.time()
-    #
-    #     earlyStopping = EarlyStopping(
-    #         monitor='val_loss',
-    #         patience=5,
-    #         restore_best_weights=True
-    #     )
-    #
-    #     history = lstmModel.fit(
-    #         scaledTrainData,self.seqLabelsTrain,
-    #         validation_data = (scaledTestData,self.seqLabelsTest),
-    #         epochs = epochs,
-    #         batch_size = batchSize,
-    #         class_weight = classWeights,
-    #         callbacks = [earlyStopping],
-    #         verbose = 0
-    #     )
-    #
-    #     trainingTime = time.time()-startTime
-    #     print(f'LSTM training done in {trainingTime:.2f} seconds')
-    #
-    #     predProb = lstmModel.predict(scaledTestData).flatten()
-    #     preds = (predProb>0.5).astype(int)
-    #
-    #     self.modelPerformance('LSTM',self.seqLabelsTest,preds,predProb,modelType='supervised')
-    #
-    #     self.models['LSTM'] = lstmModel
-    #     self.scalers['LSTM'] = scaler
-    #
-    #     return
 
     def trainLSTM(self,units=64,epochs=30,batchSize=128,dropout=0.3,learningRate=0.0005):
         print('Training LSTM')

@@ -48,7 +48,6 @@ def runFeatureExtraction(explorationResults):
 
 def buildDetectionModels(featureData,dataFolder):
     redTeamPath = Path(dataFolder)/'redteam.txt'
-    # models =['isolationForest','SVM','randomForest']
     models = ['isolationForest','randomForest']
     detectionModel = dm.detectionModels(featureData,redTeamPath=redTeamPath)
     detectionModel.groundTruthLabels()
@@ -69,6 +68,6 @@ def buildDetectionModels(featureData,dataFolder):
     }
 
 
-dataFolder = '/home/dylan/Documents/APTDetection/Data'
+dataFolder = '/path/to/data/here/'
 results = runInitialExploration(dataFolder,sampleSize=3500000)
 featureData,featureValidation = runFeatureExtraction(results)
